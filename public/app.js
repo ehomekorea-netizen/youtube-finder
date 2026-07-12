@@ -1604,6 +1604,9 @@ function showOnboardingGrokBubble() {
   
   const text = `안녕하세요! Youtube Finder입니다. 다음과 같이 명령하시면 실시간 유튜브 영상을 검색해 드릴 수 있습니다.\n\n• "최근 손흥민 축구 경기 보여줘"\n• "맛있는 백종원 김치찌개 레시피 추천해줘"\n• "AI 코딩 어시스턴트 관련 트렌드 알아봐줘"`;
   
+  const contentEl = currentGrokBubble.querySelector(".bubble-content");
+  contentEl.innerHTML = ""; // 💡 타이핑 시작 전 로딩용 점(...) 엘리먼트를 소거하여 공백 정렬 버그 해결!
+  
   // 💡 커스텀 타이핑 루프 기동 (타이핑 중간에 welcome.mp3 연동)
   let charIdx = 0;
   const totalLen = text.length;
@@ -1617,7 +1620,7 @@ function showOnboardingGrokBubble() {
     }
     
     if (charIdx < totalLen) {
-      currentGrokBubble.querySelector(".bubble-content").innerText += text[charIdx];
+      contentEl.innerText += text[charIdx];
       
       // 💡 텍스트 타이핑이 중간쯤(50%) 진행되었을 때 웰컴 음성 MP3를 자연스럽게 겹쳐서 재생!
       if (charIdx >= midPoint && !audioPlayed) {
@@ -1813,22 +1816,11 @@ function initAudioContextsOnGesture() {
   source.connect(playbackCtx.destination);
   source.start(0);
 
-  // 💡 iOS Safari 대응: 제스처 이벤트 내에서 웰컴 오디오 객체를 음소거(Muted) 상태로 임시 재생해 브라우저 오디오 재생 제약을 완전히 풉니다.
-  if (!welcomeAudio) {
-    welcomeAudio = new Audio("/welcome.mp3");
-  }
-  welcomeAudio.muted = true; // 소리 누출 및 중복 재생 방지용 임시 음소거
-  const playPromise = welcomeAudio.play();
-  if (playPromise !== undefined) {
-    playPromise.then(() => {
-      welcomeAudio.pause();
-      welcomeAudio.currentTime = 0;
-      welcomeAudio.muted = false; // 복구
-    }).catch(e => {
-      console.log("🔊 iOS Audio Whitelist unlocked:", e.message);
-      welcomeAudio.muted = false;
-    });
-  }
+  // 💡 iOS Safari 대응: 동기 제스처 이벤트 내에서 1px 크기의 완전 무음 오디오를 임시 재생하여 브라우저의 미디어 재생 제약(Autoplay Block)을 무소음으로 완전히 잠금 해제합니다.
+  const dummyAudio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAAA");
+  dummyAudio.play().catch(e => {
+    console.log("🔊 iOS Audio Whitelist unlocked:", e.message);
+  });
 }
 
 // 💬 온보딩 대화방 말풍선 카드 렌더링 함수
