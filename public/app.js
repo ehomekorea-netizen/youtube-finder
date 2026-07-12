@@ -940,45 +940,6 @@ async function sendSessionUpdate() {
       startOnboardingSpeechRecognition();
     }
   }
-
-  // 💡 모션 지연 최적화: 화면 전환 완료 후 자연스럽게 그록이 대답하며 소리가 나오도록 500ms 지연 재생 및 타이핑 효과 시작
-  setTimeout(() => {
-    if (!isRecording) return; // 세션이 중간에 취소된 경우 중단
-    
-    // 웰컴 카드를 숨겨 화면을 초기화
-    if (welcomeCard) welcomeCard.classList.add("hidden");
-
-    // 1. 그록 웰컴 말풍선 생성 및 타이핑 효과 시작
-    const welcomeText = "반갑습니다! 어떤 영상이 궁금하신가요?";
-    const welcomeBubble = createChatBubble("grok", true);
-    
-    let charIdx = 0;
-    const typeInterval = setInterval(() => {
-      if (!isRecording) {
-        clearInterval(typeInterval);
-        return;
-      }
-      if (charIdx < welcomeText.length) {
-        welcomeBubble.querySelector(".bubble-content").innerText += welcomeText[charIdx];
-        charIdx++;
-        // 스크롤 동기화
-        const scrollArea = document.querySelector(".card-display-area");
-        if (scrollArea) scrollArea.scrollTo({ top: scrollArea.scrollHeight, behavior: 'smooth' });
-      } else {
-        clearInterval(typeInterval);
-        welcomeBubble.classList.remove("typing-cursor");
-      }
-    }, 45); // 글자당 45ms 타이핑 속도
-
-    // 2. 웰컴 오디오 재생 (음소거 확실히 풀고 재생)
-    if (welcomeAudio) {
-      welcomeAudio.muted = false;
-      welcomeAudio.play().catch(err => {
-        console.warn("웰컴 MP3 재생 실패 (사용자 상호작용 제약):", err);
-      });
-    }
-    console.log("📤 로컬 welcome.mp3 지연 재생 및 타이핑 가동 완료");
-  }, 500);
 }
 
 // --- 마이크 캡처 → PCM16 base64 → WebSocket 전송 ---
@@ -1638,6 +1599,48 @@ function renderYoutubeWidget(query, videos) {
   console.log("✅ 유튜브 위젯 카드 렌더링 완료!");
 }
 
+function showOnboardingGrokBubble() {
+  if (welcomeCard) welcomeCard.classList.add("hidden");
+  
+  currentGrokBubble = createChatBubble("grok", true);
+  
+  const text = `안녕하세요! Youtube Finder입니다. 다음과 같이 명령하시면 실시간 유튜브 영상을 검색해 드릴 수 있습니다.\n\n• "최근 손흥민 축구 경기 보여줘"\n• "맛있는 백종원 김치찌개 레시피 추천해줘"\n• "AI 코딩 어시스턴트 관련 트렌드 알아봐줘"`;
+  
+  // 💡 커스텀 타이핑 루프 기동 (타이핑 중간에 welcome.mp3 연동)
+  let charIdx = 0;
+  const totalLen = text.length;
+  const midPoint = Math.floor(totalLen / 2);
+  let audioPlayed = false;
+
+  const interval = setInterval(() => {
+    if (!isRecording) {
+      clearInterval(interval);
+      return;
+    }
+    
+    if (charIdx < totalLen) {
+      currentGrokBubble.querySelector(".bubble-content").innerText += text[charIdx];
+      
+      // 💡 텍스트 타이핑이 중간쯤(50%) 진행되었을 때 웰컴 음성 MP3를 자연스럽게 겹쳐서 재생!
+      if (charIdx >= midPoint && !audioPlayed) {
+        audioPlayed = true;
+        if (welcomeAudio) {
+          welcomeAudio.muted = false;
+          welcomeAudio.play().catch(err => console.warn("웰컴 재생 실패:", err));
+        }
+      }
+      
+      charIdx++;
+      const scrollArea = document.querySelector(".card-display-area");
+      if (scrollArea) scrollArea.scrollTo({ top: scrollArea.scrollHeight, behavior: 'smooth' });
+    } else {
+      clearInterval(interval);
+      currentGrokBubble.classList.remove("typing-cursor");
+      currentGrokBubble = null;
+    }
+  }, 40); // 글자당 40ms 속도
+}
+
 // 실시간 검색 실패 시 표출하는 재시도/가이드 에러 카드 렌더러
 function renderSearchErrorWidget(query, errorMessage) {
   console.log(`🎬 renderSearchErrorWidget 호출: query="${query}", error="${errorMessage}"`);
@@ -1849,18 +1852,7 @@ function createChatBubble(role, isTyping = false) {
   return bubble;
 }
 
-// 🚀 최초 가이드/온보딩 안내 타이핑 말풍선 노출 함수
-function showOnboardingGrokBubble() {
-  if (welcomeCard) welcomeCard.classList.add("hidden");
-  
-  currentGrokBubble = createChatBubble("grok", true);
-  
-  const text = `안녕하세요! Youtube Finder입니다. 다음과 같이 명령하시면 실시간 유튜브 영상을 검색해 드릴 수 있습니다.\n\n• "최근 손흥민 축구 경기 보여줘"\n• "맛있는 백종원 김치찌개 레시피 추천해줘"\n• "AI 코딩 어시스턴트 관련 트렌드 알아봐줘"`;
-  
-  typingQueue = text.split("");
-  isTypingLoopRunning = true;
-  runTypewriterLoop();
-}
+
 
 
 // 7. 실시간 맵 마킹 추가 (음성 시나리오용)
@@ -2149,8 +2141,7 @@ function startMockSession() {
   // 온보딩 가이드 타이핑 노출
   showOnboardingGrokBubble();
 
-  // 음성 웰컴 대사 출력 (Lumen 보이스 컨셉)
-  speakMockVoice("반갑습니다! 어떤 영상이 궁금하신가요?");
+  // 💡 음성 웰컴 대사는 showOnboardingGrokBubble의 타이핑 중간 과정에서 공통 재생하므로 여기서는 생략합니다.
 
   // 1단계: 6초 뒤 사용자 음성 인식(STT) 가상 전사 말풍선 렌더링
   mockTimer1 = setTimeout(() => {
