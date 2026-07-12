@@ -912,19 +912,30 @@ async function sendSessionUpdate() {
     }
   }
 
-  // 💡 에코/피드백 루프 방지: 웰컴 오디오가 안전하게 완전히 종료된 후에 비소로 실시간 VAD 마이크 스트리밍을 활성화합니다.
+  // 💡 에코/피드백 루프 방지: 웰컴 오디오가 안전하게 완전히 종료된 후에 비소로 온보딩용 WebSpeech 음성 인식을 활성화합니다.
   welcomeAudio.onended = () => {
-    console.log("🔊 웰컴 오디오 재생 완료. 실시간 마이크(VAD) 기동.");
+    console.log("🔊 웰컴 오디오 재생 완료. 온보딩용 WebSpeech STT 기동.");
     if (ws && ws.readyState === WebSocket.OPEN) {
-      startMicCapture();
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        console.warn("⚠️ WebSpeech API 미지원 브라우저입니다. 실시간 VAD 마이크 스트리밍으로 즉시 폴백합니다.");
+        startMicCapture();
+      } else {
+        startOnboardingSpeechRecognition();
+      }
     }
   };
 
   welcomeAudio.play().catch(err => {
     console.warn("웰컴 MP3 재생 실패 (사용자 상호작용 제약):", err);
-    // 재생 실패 시 즉시 마이크 기동
+    // 재생 실패 시 즉시 마이크/STT 가동
     if (ws && ws.readyState === WebSocket.OPEN) {
-      startMicCapture();
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        startMicCapture();
+      } else {
+        startOnboardingSpeechRecognition();
+      }
     }
   });
   console.log("📤 로컬 welcome.mp3 재생 완료 (xAI API 발화 생량)");
@@ -2335,6 +2346,15 @@ function startOnboardingSpeechRecognition() {
 
   recognition.onend = () => {
     console.log("SpeechRecognition stopped.");
+    // 💡 아직 썸네일 카드가 노출되기 전이고, 세션이 살아있다면(isRecording === true) 자동으로 음성인식을 재시작해 기회를 줍니다.
+    if (isRecording && !hasRenderedYoutubeWidget && ws && ws.readyState === WebSocket.OPEN) {
+      console.log("🔄 온보딩 검색 대기 유지: WebSpeech Recognition 재기동");
+      try {
+        recognition.start();
+      } catch (e) {
+        // 이미 켜진 경우의 에러 방어
+      }
+    }
   };
 
   recognition.start();
