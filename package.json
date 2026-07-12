@@ -2,9 +2,9 @@
   "name": "voice-travel-planner-mvp",
   "version": "1.0.0",
   "description": "실시간 음성 기반 꼬리를 무는 여행 동선 지도 MVP",
-  "main": "server.js",
+  "main": "api/index.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node api/index.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

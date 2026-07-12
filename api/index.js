@@ -9,8 +9,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // 윈도우 숨김 파일 제약을 피하기 위한 env.txt 자동 동기화 로직
-const txtPath = path.join(__dirname, "env.txt");
-const dotPath = path.join(__dirname, ".env");
+const txtPath = path.join(__dirname, "../env.txt");
+const dotPath = path.join(__dirname, "../.env");
 if (fs.existsSync(txtPath)) {
   fs.copyFileSync(txtPath, dotPath);
 }
@@ -21,7 +21,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "../public")));
 
 // 1. xAI Grok Realtime Ephemeral Token 발급 Endpoint (가성비 Grok 단독 모드)
 app.post("/api/session", async (req, res) => {
@@ -351,9 +351,9 @@ function formatPublishedAt(dateStr) {
 
 // 🎙️ 서버 시작 시 config.json의 웰컴 메시지를 로컬 MP3 파일로 구워두기 (xAI API 요금 소모 최소화)
 async function generateWelcomeMp3() {
-  const welcomeMp3Path = path.join(__dirname, "public", "welcome.mp3");
-  const configPath = path.join(__dirname, "public", "config.json");
-  const welcomeTextCachePath = path.join(__dirname, "public", "welcome_text.txt");
+  const welcomeMp3Path = path.join(__dirname, "../public", "welcome.mp3");
+  const configPath = path.join(__dirname, "../public", "config.json");
+  const welcomeTextCachePath = path.join(__dirname, "../public", "welcome_text.txt");
   const apiKey = process.env.XAI_API_KEY ? process.env.XAI_API_KEY.trim() : null;
 
   if (!apiKey) {
