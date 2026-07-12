@@ -696,7 +696,15 @@ async function toggleSession() {
 
 async function startSession() {
   try {
-    // 🎙️ 모바일 웹앱 대응: 오디오 비주얼라이저 클릭 즉시 브라우저 마이크 승인 팝업 노출
+    // 💡 렉 없는 햅틱 UX: 오디오 버튼 터치 즉시 화면을 웰컴 로띠 상태로 전환하고 대기 타이머 시동
+    resetUI(false);
+    resetIdleTimer();
+
+    // Orb 터치 즉시 활성 초록색으로 표시 및 중복 클릭 방지
+    statusIndicator.className = "status-indicator connected";
+    micBtn.disabled = true;
+
+    // 🎙️ 모바일 웹앱 대응: 웰컴 상태로 진입한 채로 마이크 권한 요청 승인 팝업 노출
     if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === "function") {
       try {
         const permissionStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -711,14 +719,6 @@ async function startSession() {
     } else {
       console.warn("⚠️ navigator.mediaDevices.getUserMedia가 지원되지 않는 브라우저/환경입니다. 확인 생략.");
     }
-
-    // 💡 새로운 세션 시작 시 이전 검색 결과를 소거하고 초기 웰컴 상태로 완전히 리셋
-    resetUI(false);
-    resetIdleTimer();
-
-    // Orb 터치 즉시 초록색으로 전환
-    statusIndicator.className = "status-indicator connected";
-    micBtn.disabled = true;
 
     const response = await fetch("/api/session", { method: "POST" });
     const data = await response.json();
