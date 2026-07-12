@@ -424,9 +424,11 @@ async function generateWelcomeMp3() {
   }
 }
 
-app.listen(PORT, async () => {
-  console.log(`🚀 MVP 서버 실행 중: http://localhost:${PORT}`);
-  await generateWelcomeMp3();
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, async () => {
+    console.log(`🚀 MVP 서버 실행 중: http://localhost:${PORT}`);
+    await generateWelcomeMp3();
+  });
+}
 
 export default app;
