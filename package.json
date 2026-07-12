@@ -1,7 +1,7 @@
 {
-  "name": "voice-travel-planner-mvp",
+  "name": "youtube-finder",
   "version": "1.0.0",
-  "description": "실시간 음성 기반 꼬리를 무는 여행 동선 지도 MVP",
+  "description": "실시간 음성 기반 유튜브 최신 트렌드 검색 및 아카이빙 비서 (Youtube Finder)",
   "main": "api/index.js",
   "scripts": {
     "start": "node api/index.js"
