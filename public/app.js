@@ -20,6 +20,7 @@ let grokTextFinished = false;  // 그록의 텍스트 생성 완료 플래그
 let hasRenderedYoutubeWidget = false; // 최초 썸네일 노출 여부 추적 플래그
 let recognition = null;               // 브라우저 WebSpeech API 객체 참조
 let welcomeAudio = null;              // 로컬 웰컴 오디오 객체 참조
+let idleTimer = null;                 // 무반응 세션 자동 종료 타이머 참조
 
 
 
@@ -696,6 +697,7 @@ async function startSession() {
   try {
     // 💡 새로운 세션 시작 시 이전 검색 결과를 소거하고 초기 웰컴 상태로 완전히 리셋
     resetUI(false);
+    resetIdleTimer();
 
     // Orb 터치 즉시 초록색으로 전환
     statusIndicator.className = "status-indicator connected";
@@ -1077,6 +1079,14 @@ function interruptPlayback() {
     welcomeAudio = null;
   }
 
+  // 💡 서버 오디오 생성 토큰 절약: 실시간 서버에 현재 발화 생성 취소 요청을 전격 송신
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    try {
+      ws.send(JSON.stringify({ type: "response.cancel" }));
+      console.log("📤 response.cancel 전송 (서버 오디오 생성 중단 완료)");
+    } catch (e) {}
+  }
+
   playbackQueue = [];
   typingQueue = []; // 타이핑 대기 큐 리셋
   isTypingLoopRunning = false;
@@ -1095,6 +1105,11 @@ function interruptPlayback() {
 
 // --- WebSocket 이벤트 핸들러 ---
 function handleRealtimeEvent(event) {
+  // 💡 불필요한 과부하 방지: 매초 수십 번씩 쏟아지는 오디오/텍스트 델타 스트리밍 데이터는 제외하고 타이머 리셋
+  if (event.type && !event.type.endsWith(".delta")) {
+    resetIdleTimer();
+  }
+
   // session.updated 확인
   if (event.type === "session.updated") {
     console.log("✅ session.updated 수신 — 설정 적용 성공!", event.session?.tools);
@@ -1579,8 +1594,28 @@ function renderSearchErrorWidget(query, errorMessage) {
   }
 }
 
+// ⏰ 무반응 세션 자동 종료 타이머 기동 (사용 요금 절약용 안전장치)
+function resetIdleTimer() {
+  if (idleTimer) clearTimeout(idleTimer);
+  
+  // 35초 동안 무반응이면 마이크를 켜둔 상태로 대기하며 불필요한 VAD 요금이 발생하는 것을 방지하기 위해 자동 세션 차단
+  idleTimer = setTimeout(() => {
+    if (isRecording) {
+      console.log("⏰ [Idle Timeout] 35초 동안 대화가 없어 마이크 세션을 자동 차단합니다.");
+      showToast("대기 시간이 초과되어 대화가 자동 종료되었습니다.");
+      stopSession();
+    }
+  }, 35000);
+}
+
 function stopSession() {
   console.log("🔌 세션 종료 절차를 즉시 가동합니다...");
+  
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+    idleTimer = null;
+  }
+
   if (isMockMode) {
     stopMockSession();
     return;
