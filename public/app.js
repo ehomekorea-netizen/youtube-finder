@@ -697,14 +697,19 @@ async function toggleSession() {
 async function startSession() {
   try {
     // 🎙️ 모바일 웹앱 대응: 오디오 비주얼라이저 클릭 즉시 브라우저 마이크 승인 팝업 노출
-    try {
-      const permissionStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // 권한 승인 시 즉시 임시 트랙 정지 (실제 녹음은 세션 시작 후 VAD로 가동)
-      permissionStream.getTracks().forEach(track => track.stop());
-    } catch (micErr) {
-      console.warn("🎙️ 마이크 권한이 없거나 차단됨:", micErr);
-      alert("마이크 사용 권한이 필요합니다. 브라우저 설정이나 메신저 우측 하단 메뉴에서 마이크를 허용해 주세요.");
-      return;
+    if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === "function") {
+      try {
+        const permissionStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // 권한 승인 시 즉시 임시 트랙 정지 (실제 녹음은 세션 시작 후 VAD로 가동)
+        permissionStream.getTracks().forEach(track => track.stop());
+      } catch (micErr) {
+        console.warn("🎙️ 마이크 권한이 없거나 차단됨:", micErr);
+        alert("마이크 사용 권한이 필요합니다. 브라우저 설정이나 메신저 우측 하단 메뉴에서 마이크를 허용해 주세요.");
+        resetUI();
+        return;
+      }
+    } else {
+      console.warn("⚠️ navigator.mediaDevices.getUserMedia가 지원되지 않는 브라우저/환경입니다. 확인 생략.");
     }
 
     // 💡 새로운 세션 시작 시 이전 검색 결과를 소거하고 초기 웰컴 상태로 완전히 리셋
@@ -898,17 +903,25 @@ async function sendSessionUpdate() {
   console.log("📤 session.update 전송 완료 (WebSocket)");
 
   // 💡 실시간 API 비용을 절약하기 위해, 준비된 로컬 welcome.mp3 파일을 웹브라우저에서 직접 재생하고 비주얼라이저에 바인딩합니다.
-  // 💡 실시간 API 비용을 절약하기 위해, 준비된 로컬 welcome.mp3 파일을 웹브라우저에서 직접 재생하고 비주얼라이저에 바인딩합니다.
-  welcomeAudio = new Audio("/welcome.mp3");
-  if (playbackCtx) {
-    try {
-      const sourceNode = playbackCtx.createMediaElementSource(welcomeAudio);
-      sourceNode.connect(playbackCtx.destination);
-      if (grokAnalyser) {
-        sourceNode.connect(grokAnalyser);
+  if (!welcomeAudio) {
+    welcomeAudio = new Audio("/welcome.mp3");
+  } else {
+    welcomeAudio.src = "/welcome.mp3";
+  }
+
+  // 중복 바인딩으로 인한 Web Audio API InvalidStateError 방지
+  if (!welcomeAudio.hasMediaElementSource) {
+    if (playbackCtx) {
+      try {
+        const sourceNode = playbackCtx.createMediaElementSource(welcomeAudio);
+        sourceNode.connect(playbackCtx.destination);
+        if (grokAnalyser) {
+          sourceNode.connect(grokAnalyser);
+        }
+        welcomeAudio.hasMediaElementSource = true;
+      } catch (e) {
+        console.warn("⚠️ WebAudio MediaElementSource 바인딩 실패:", e);
       }
-    } catch (e) {
-      console.warn("⚠️ WebAudio MediaElementSource 바인딩 실패:", e);
     }
   }
 
@@ -1088,8 +1101,9 @@ function interruptPlayback() {
   if (welcomeAudio) {
     try {
       welcomeAudio.pause();
+      welcomeAudio.currentTime = 0;
     } catch (e) {}
-    welcomeAudio = null;
+    // welcomeAudio = null; // iOS 오디오 권한 우회 화이트리스트 유지를 위해 인스턴스 보존
   }
 
   // 💡 서버 오디오 생성 토큰 절약: 활성화된 응답 발화가 있을 때만 서버에 취소(response.cancel) 전송
@@ -1752,6 +1766,20 @@ function initAudioContextsOnGesture() {
   source.buffer = buffer;
   source.connect(playbackCtx.destination);
   source.start(0);
+
+  // 💡 iOS Safari 대응: 제스처 이벤트 내에서 웰컴 오디오 객체를 임시 재생해 브라우저 오디오 재생 제약을 완전히 풉니다.
+  if (!welcomeAudio) {
+    welcomeAudio = new Audio("/welcome.mp3");
+  }
+  const playPromise = welcomeAudio.play();
+  if (playPromise !== undefined) {
+    playPromise.then(() => {
+      welcomeAudio.pause();
+      welcomeAudio.currentTime = 0;
+    }).catch(e => {
+      console.log("🔊 iOS Audio Whitelist unlocked:", e.message);
+    });
+  }
 }
 
 // 💬 온보딩 대화방 말풍선 카드 렌더링 함수
