@@ -2417,7 +2417,7 @@ function startOnboardingSpeechRecognition() {
           item: {
             type: "message",
             role: "user",
-            content: [{ type: "text", text: `유튜브에서 다음 키워드로 검색해줘: "${text}"` }]
+            content: [{ type: "text", text: text }]
           }
         }));
         ws.send(JSON.stringify({ type: "response.create" }));
