@@ -1251,29 +1251,13 @@ async function handleFunctionCall(event) {
   // 💡 재생 툴은 백엔드 호출 없이 즉시 프론트엔드 단에서 링크를 열고 세션을 완전 차단/종료 처리
   if (name === "play_video") {
     const idx = parseInt(args.index, 10) - 1;
-    let success = false;
-    let msg = "해당 번호의 영상을 찾을 수 없습니다.";
-    
     if (window.currentContextVideos && window.currentContextVideos[idx]) {
       const video = window.currentContextVideos[idx];
       console.log(`🎬 [Play Video] ${idx + 1}번째 영상 재생 시도:`, video.title);
       
       launchYoutubeVideo(video);
       stopSession();
-      success = true;
-      msg = "유튜브 영상 재생 및 대화 세션 종료 완료";
     }
-
-    // 결과 반환
-    ws.send(JSON.stringify({
-      type: "conversation.item.create",
-      item: {
-        type: "function_call_output",
-        call_id: call_id,
-        output: JSON.stringify({ success, message: msg })
-      }
-    }));
-    ws.send(JSON.stringify({ type: "response.create" }));
     return;
   }
 
@@ -1347,27 +1331,13 @@ async function handleFunctionCall(event) {
         // WebRTC 채널용 play_video 툴 직접 처리
         if (name === "play_video") {
           const idx = parseInt(args.index, 10) - 1;
-          let success = false;
-          let msg = "해당 번호의 영상을 찾을 수 없습니다.";
-          
           if (window.currentContextVideos && window.currentContextVideos[idx]) {
             const video = window.currentContextVideos[idx];
             console.log(`🎬 [Play Video] ${idx + 1}번째 영상 재생 시도:`, video.title);
             
             launchYoutubeVideo(video);
             stopSession();
-            success = true;
-            msg = "유튜브 영상 재생 및 대화 세션 종료 완료";
           }
-
-          dataChannel.send(JSON.stringify({
-            type: "conversation.item.create",
-            item: {
-              type: "function_call_output",
-              call_id: call_id,
-              output: JSON.stringify({ success, message: msg })
-            }
-          }));
           return;
         }
 
