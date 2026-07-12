@@ -925,21 +925,19 @@ async function sendSessionUpdate() {
     }
   }
 
-  // 💡 웰컴 오디오 완료 이벤트 핸들러
+  // 💡 웰컴 오디오 완료 이벤트 핸들러 (웰컴 음성 안내가 완전히 끝나는 즉시 마이크/STT 가동)
   welcomeAudio.onended = () => {
-    console.log("🔊 웰컴 오디오 재생 완료. 이제 마이크 수음 입력 대기 중.");
-  };
-
-  // 💡 마이크 기동 선제 실행 (STT 및 녹음 표시등 즉각 켜짐)
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.warn("⚠️ WebSpeech API 미지원 브라우저입니다. 실시간 VAD 마이크 스트리밍으로 즉시 기동합니다.");
-      startMicCapture();
-    } else {
-      startOnboardingSpeechRecognition();
+    console.log("🔊 웰컴 오디오 재생 완료. 온보딩용 WebSpeech STT 기동.");
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        console.warn("⚠️ WebSpeech API 미지원 브라우저입니다. 실시간 VAD 마이크 스트리밍으로 즉시 폴백 기동합니다.");
+        startMicCapture();
+      } else {
+        startOnboardingSpeechRecognition();
+      }
     }
-  }
+  };
 }
 
 // --- 마이크 캡처 → PCM16 base64 → WebSocket 전송 ---
@@ -1626,7 +1624,18 @@ function showOnboardingGrokBubble() {
         audioPlayed = true;
         if (welcomeAudio) {
           welcomeAudio.muted = false;
-          welcomeAudio.play().catch(err => console.warn("웰컴 재생 실패:", err));
+          welcomeAudio.play().catch(err => {
+            console.warn("웰컴 재생 실패:", err);
+            // 오디오 재생 실패 시 사용자가 입력하지 못하고 대기 상태에 빠지는 것을 막기 위해 마이크 즉시 활성화
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+              if (!SpeechRecognition) {
+                startMicCapture();
+              } else {
+                startOnboardingSpeechRecognition();
+              }
+            }
+          });
         }
       }
       
