@@ -925,33 +925,27 @@ async function sendSessionUpdate() {
     }
   }
 
-  // 💡 에코/피드백 루프 방지: 웰컴 오디오가 안전하게 완전히 종료된 후에 비소로 온보딩용 WebSpeech 음성 인식을 활성화합니다.
+  // 💡 웰컴 오디오 완료 이벤트 핸들러
   welcomeAudio.onended = () => {
-    console.log("🔊 웰컴 오디오 재생 완료. 온보딩용 WebSpeech STT 기동.");
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        console.warn("⚠️ WebSpeech API 미지원 브라우저입니다. 실시간 VAD 마이크 스트리밍으로 즉시 폴백합니다.");
-        startMicCapture();
-      } else {
-        startOnboardingSpeechRecognition();
-      }
-    }
+    console.log("🔊 웰컴 오디오 재생 완료. 이제 마이크 수음 입력 대기 중.");
   };
 
+  // 💡 마이크 기동 선제 실행 (STT 및 녹음 표시등 즉각 켜짐)
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn("⚠️ WebSpeech API 미지원 브라우저입니다. 실시간 VAD 마이크 스트리밍으로 즉시 기동합니다.");
+      startMicCapture();
+    } else {
+      startOnboardingSpeechRecognition();
+    }
+  }
+
+  // 💡 마이크가 활성화된 상태에서 바로 로컬 웰컴 멘트를 재생합니다.
   welcomeAudio.play().catch(err => {
     console.warn("웰컴 MP3 재생 실패 (사용자 상호작용 제약):", err);
-    // 재생 실패 시 즉시 마이크/STT 가동
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        startMicCapture();
-      } else {
-        startOnboardingSpeechRecognition();
-      }
-    }
   });
-  console.log("📤 로컬 welcome.mp3 재생 완료 (xAI API 발화 생량)");
+  console.log("📤 로컬 welcome.mp3 재생 시작 및 마이크 선제 가동 완료");
 }
 
 // --- 마이크 캡처 → PCM16 base64 → WebSocket 전송 ---
@@ -980,6 +974,13 @@ async function startMicCapture() {
   micProcessor = micContext.createScriptProcessor(2048, 1, 1);
   micProcessor.onaudioprocess = (e) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    
+    // 💡 웰컴 오디오가 재생 중이거나 아직 끝나지 않은 초기 온보딩 상태인 동안에는 
+    // 마이크 스트림 데이터 전송을 임시 뮤트(차단)하여 에코 피드백 루프를 방지합니다.
+    if (welcomeAudio && !welcomeAudio.paused && !hasRenderedYoutubeWidget) {
+      return;
+    }
+    
     const float32 = e.inputBuffer.getChannelData(0);
     
     // 다운샘플링: nativeSR → 24000
@@ -2359,6 +2360,11 @@ function startOnboardingSpeechRecognition() {
     console.log("🎙️ [WebSpeech STT 결과]", text);
     
     if (text && text.trim().length > 0 && !hasRenderedYoutubeWidget) {
+      // 💡 웰컴 오디오가 아직 재생 중인 동안에는 음성인식 결과를 철저히 무시합니다.
+      if (welcomeAudio && !welcomeAudio.paused) {
+        console.log("🤫 웰컴 메시지 재생 중이므로 음성인식 결과 무시:", text);
+        return;
+      }
       // 1. 유저 화면 전사용 싱글 말풍선 렌더링
       if (!currentUserBubble) {
         currentUserBubble = createChatBubble("user");
