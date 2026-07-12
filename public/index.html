@@ -82,19 +82,20 @@
           </div>
         </main>
 
-        <!-- 플로팅 인디케이터 (상태 표시) - 하단 좌측 정렬 (노란색 원 위치) -->
-        <div style="position: absolute; left: 1.5rem; bottom: 2.2rem; z-index: 50; display: flex; align-items: center; justify-content: center; height: 32px; width: 32px; pointer-events: none;">
-          <span class="status-indicator disconnected" id="connection-status" title="연결 상태"></span>
-        </div>
+        <!-- 화면 하단: 오디오 비주얼라이저 (클릭하여 마이크 토글) 및 상태/취소 버튼 동기화 정렬 -->
+        <section class="voice-interaction-area" style="position: relative; display: flex; justify-content: center; align-items: center; padding: 0; width: 100%;">
+          
+          <!-- 플로팅 인디케이터 (상태 표시) - 하단 좌측 정렬 (오브와 수직 정렬 동기화) -->
+          <div style="position: absolute; left: 1.2rem; top: 50%; transform: translateY(-50%); z-index: 50; display: flex; align-items: center; justify-content: center; height: 32px; width: 32px; pointer-events: none;">
+            <span class="status-indicator disconnected" id="connection-status" title="연결 상태"></span>
+          </div>
 
-        <!-- 화면 하단: 오디오 비주얼라이저 (클릭하여 마이크 토글) -->
-        <section class="voice-interaction-area" style="position: relative; display: flex; justify-content: center; align-items: center; padding: 0;">
           <div id="orb-mic-btn" class="orb-container" style="cursor: pointer; z-index: 10;" title="마이크 켜기/끄기">
             <canvas id="audio-visualizer"></canvas>
           </div>
 
-          <!-- 세션 취소(X) 버튼 (우측 플로팅) -->
-          <button id="cancel-btn" class="control-btn session-cancel hidden" aria-label="세션 종료" style="position: absolute; right: 1.1rem; bottom: 0.8rem; z-index: 20;">
+          <!-- 세션 취소(X) 버튼 (우측 플로팅 - 오브와 수직 정렬 동기화) -->
+          <button id="cancel-btn" class="control-btn session-cancel hidden" aria-label="세션 종료" style="position: absolute; right: 1.2rem; top: 50%; transform: translateY(-50%); z-index: 20; margin: 0; padding: 0;">
             <span class="btn-icon">✕</span>
           </button>
         </section>
