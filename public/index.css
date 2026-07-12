@@ -890,15 +890,15 @@ body {
     border: none !important;          /* 중첩 둥근 경계선 테두리 제거 */
     border-radius: 0 !important;       /* 모바일 전체화면을 위한 곡률 제거 */
     box-shadow: none !important;
-    /* 하단 홈 인디케이터 여백 확보를 위해 bottom padding을 1.6rem + 안전영역으로 최적 비율 튜닝 */
-    padding: 1.2rem 1.1rem calc(1.6rem + env(safe-area-inset-bottom)) 1.1rem !important;
+    /* 하단 홈 인디케이터 여백 확보를 최적화하여 주파수 라인을 하단으로 정밀 하강 */
+    padding: 1.2rem 1.1rem calc(0.3rem + env(safe-area-inset-bottom)) 1.1rem !important;
     backdrop-filter: none !important;
     background: #070913 !important;   /* 배경 완전 단색 통합으로 분할 느낌 제거 */
   }
   
-  /* 하단 마이크 Orb가 잘리지 않도록 높이 조절 */
+  /* 하단 마이크 Orb의 높이를 50px로 콤팩트화하여 하단 밀착 배치 */
   .orb-container {
-    height: 70px !important;
-    margin-bottom: 0.6rem !important;
+    height: 50px !important;
+    margin-bottom: 0px !important;
   }
 }

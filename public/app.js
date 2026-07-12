@@ -700,8 +700,8 @@ async function startSession() {
     resetUI(false);
     resetIdleTimer();
 
-    // Orb 터치 즉시 활성 초록색으로 표시 및 중복 클릭 방지
-    statusIndicator.className = "status-indicator connected";
+    // Orb 터치 즉시 활성 상태 전환 및 중복 클릭 방지
+    if (statusIndicator) statusIndicator.className = "status-indicator connected";
     micBtn.disabled = true;
 
     // 🎙️ 모바일 웹앱 대응: 웰컴 상태로 진입한 채로 마이크 권한 요청 승인 팝업 노출
@@ -1759,14 +1759,14 @@ function stopSession() {
 }
 
 function updateUIForConnectedState() {
-  statusIndicator.className = "status-indicator connected";
+  if (statusIndicator) statusIndicator.className = "status-indicator connected";
   cancelBtn.classList.remove("hidden");
   if (typeof chatInput !== "undefined" && chatInput) chatInput.placeholder = "대화 중...";
   if (micBtn) micBtn.disabled = false;
 }
 
 function resetUI(keepCards = false) {
-  statusIndicator.className = "status-indicator disconnected";
+  if (statusIndicator) statusIndicator.className = "status-indicator disconnected";
   cancelBtn.classList.add("hidden");
   if (typeof chatInput !== "undefined" && chatInput) chatInput.placeholder = "음성 비서에게 물어보기";
   if (micBtn) micBtn.disabled = false;
@@ -2075,19 +2075,30 @@ function startVisualizerLoop() {
     // 목소리 크기에 따라 파동의 흐름 속도를 동적으로 가속 (말할 때 흐름이 빨라져 역동적임)
     wavePhase += 0.018 + smoothVolume * 0.04;
 
-    // 동적 감정/톤 감지 색상 변화 (목소리 크기에 따라 쿨톤 -> 웜톤 전환)
-    const intensity = Math.min(smoothVolume * 1.5, 1.0);
-    const r = Math.floor(0 + (intensity * 255));
-    const g = Math.floor(240 - (intensity * 140));
-    const b = 255;
-    const baseColor = `${r}, ${g}, ${b}`;
-
     // 3개 레이어의 파동 설정 (선 두께, 색상, 위상차, 진폭 배율, 주파수 배율)
-    const waveConfigs = [
-      { width: 2.5, color: `rgba(${baseColor}, 0.85)`, phaseShift: 0, amp: 0.85, freqMult: 0.1 },
-      { width: 1.5, color: `rgba(${baseColor}, 0.45)`, phaseShift: 2.1, amp: 0.55, freqMult: 0.14 },
-      { width: 0.9, color: `rgba(${baseColor}, 0.18)`, phaseShift: 4.2, amp: 0.3, freqMult: 0.07 }
-    ];
+    let waveConfigs = [];
+    const hue = (wavePhase * 35) % 360; // 💡 서서히 부드럽게 색상 순환하는 HSL 레이저쇼 베이스
+
+    if (isRecording) {
+      // 💡 활성화 (Connected) 상태: 글로우 효과와 함께 끊임없이 요동치며 변하는 영롱한 레이저쇼 컬러 레이어
+      visualizerCtx.shadowBlur = 18;
+      visualizerCtx.shadowColor = `hsla(${hue}, 100%, 60%, 0.7)`;
+
+      waveConfigs = [
+        { width: 2.8, color: `hsla(${hue}, 100%, 65%, 0.9)`, phaseShift: 0, amp: 1.35, freqMult: 0.12 },
+        { width: 1.8, color: `hsla(${(hue + 75) % 360}, 100%, 60%, 0.55)`, phaseShift: 2.3, amp: 0.9, freqMult: 0.15 },
+        { width: 1.0, color: `hsla(${(hue + 150) % 360}, 100%, 55%, 0.25)`, phaseShift: 4.6, amp: 0.5, freqMult: 0.08 }
+      ];
+    } else {
+      // 💡 비활성화 (Disconnected) 상태: 은은하게 숨쉬는 붉은색 주파수
+      visualizerCtx.shadowBlur = 8;
+      visualizerCtx.shadowColor = "rgba(255, 69, 58, 0.4)";
+
+      waveConfigs = [
+        { width: 1.6, color: "rgba(255, 69, 58, 0.75)", phaseShift: 0, amp: 0.25, freqMult: 0.06 },
+        { width: 0.8, color: "rgba(255, 69, 58, 0.28)", phaseShift: 2.1, amp: 0.15, freqMult: 0.09 }
+      ];
+    }
 
     const sliceWidth = w / bufferLength;
 
