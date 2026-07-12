@@ -150,12 +150,29 @@ app.post("/api/mcp-gateway", async (req, res) => {
     // ── 1단계: 공식 YouTube Data API v3 실시간 검색 ──
     if (ytApiKey) {
       try {
-        const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=5&order=date&relevanceLanguage=ko&key=${ytApiKey}`;
-        const ytRes = await fetch(searchUrl);
-        
+        let searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=8&order=date&relevanceLanguage=ko&key=${ytApiKey}`;
+        let ytRes = await fetch(searchUrl);
+        let ytData = null;
+
         if (ytRes.ok) {
-          const ytData = await ytRes.json();
-          const videoIds = (ytData.items || []).map(item => item.id.videoId).join(",");
+          ytData = await ytRes.json();
+        }
+
+        // 💡 최신순(date) 결과가 없거나 적으면 즉시 관련성순(relevance)으로 2차 자동 검색 시도!
+        if (!ytData || !ytData.items || ytData.items.length < 3) {
+          console.log("⚠️ 최신순 검색 결과가 부족함. 관련성(relevance) 우선순으로 재검색합니다.");
+          searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=10&order=relevance&relevanceLanguage=ko&key=${ytApiKey}`;
+          ytRes = await fetch(searchUrl);
+          if (ytRes.ok) {
+            ytData = await ytRes.json();
+          }
+        }
+
+        if (ytData && ytData.items && ytData.items.length > 0) {
+          const videoIds = (ytData.items || [])
+            .map(item => item.id?.videoId)
+            .filter(Boolean)
+            .join(",");
           
           if (videoIds) {
             const detailUrl = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,statistics,snippet&id=${videoIds}&key=${ytApiKey}`;
@@ -178,6 +195,7 @@ app.post("/api/mcp-gateway", async (req, res) => {
                   viewCount
                 };
               })
+              // 💡 1분 이하 쇼츠 필터링
               .filter(v => {
                 const parts = v.duration.split(":");
                 if (parts.length === 1) return false;
@@ -186,12 +204,16 @@ app.post("/api/mcp-gateway", async (req, res) => {
               })
               .slice(0, 3);
               
-              if (videos.length === 3) {
-                console.log(`✅ [YouTube API] 공식 실시간 롱폼 최신순 검색 성공: ${videos.length}개 결과`);
+              // 💡 3개가 아니더라도 1개 이상의 검색 결과가 존재하면 즉각 반환! (기존의 strict 3개 제한 완화)
+              if (videos.length > 0) {
+                console.log(`✅ [YouTube API] 공식 실시간 검색 성공: ${videos.length}개 결과 반환`);
                 return res.json({ success: true, videos, source: "youtube_api" });
               }
             }
           }
+        } else if (ytRes && !ytRes.ok) {
+          const errText = await ytRes.text();
+          console.error("❌ [YouTube API Error Response]:", errText);
         }
       } catch (err) {
         console.warn(`⚠️ [YouTube API] 호출 에러: ${err.message}, 스크래핑 단계로 폴백`);
