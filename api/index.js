@@ -150,7 +150,7 @@ app.post("/api/mcp-gateway", async (req, res) => {
     // ── 1단계: 공식 YouTube Data API v3 실시간 검색 ──
     if (ytApiKey) {
       try {
-        let searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=8&order=date&relevanceLanguage=ko&key=${ytApiKey}`;
+        let searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=20&order=date&relevanceLanguage=ko&key=${ytApiKey}`;
         let ytRes = await fetch(searchUrl);
         let ytData = null;
 
@@ -161,7 +161,7 @@ app.post("/api/mcp-gateway", async (req, res) => {
         // 💡 최신순(date) 결과가 없거나 적으면 즉시 관련성순(relevance)으로 2차 자동 검색 시도!
         if (!ytData || !ytData.items || ytData.items.length < 3) {
           console.log("⚠️ 최신순 검색 결과가 부족함. 관련성(relevance) 우선순으로 재검색합니다.");
-          searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=10&order=relevance&relevanceLanguage=ko&key=${ytApiKey}`;
+          searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=20&order=relevance&relevanceLanguage=ko&key=${ytApiKey}`;
           ytRes = await fetch(searchUrl);
           if (ytRes.ok) {
             ytData = await ytRes.json();
