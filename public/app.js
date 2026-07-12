@@ -1249,19 +1249,9 @@ async function handleFunctionCall(event) {
     
     if (window.currentContextVideos && window.currentContextVideos[idx]) {
       const video = window.currentContextVideos[idx];
-      const videoUrl = video.videoUrl || video.url || `https://www.youtube.com/watch?v=${video.id}`;
+      console.log(`🎬 [Play Video] ${idx + 1}번째 영상 재생 시도:`, video.title);
       
-      console.log(`🎬 [Play Video] ${idx + 1}번째 영상 재생 시도:`, videoUrl);
-      
-      // 1. 새 창 열기 시도
-      const win = window.open(videoUrl, '_blank');
-      
-      // 2. 팝업 차단 등으로 실패 시 현재 창에서 바로 리다이렉트
-      if (!win) {
-        window.location.href = videoUrl;
-      }
-      
-      // 3. 그 즉시 음성 대화 세션 종료 (대화 끊기)
+      launchYoutubeVideo(video);
       stopSession();
       success = true;
       msg = "유튜브 영상 재생 및 대화 세션 종료 완료";
@@ -1355,13 +1345,9 @@ async function handleFunctionCall(event) {
           
           if (window.currentContextVideos && window.currentContextVideos[idx]) {
             const video = window.currentContextVideos[idx];
-            const videoUrl = video.videoUrl || video.url || `https://www.youtube.com/watch?v=${video.id}`;
+            console.log(`🎬 [Play Video] ${idx + 1}번째 영상 재생 시도:`, video.title);
             
-            console.log(`🎬 [Play Video] ${idx + 1}번째 영상 재생 시도:`, videoUrl);
-            const win = window.open(videoUrl, '_blank');
-            if (!win) {
-              window.location.href = videoUrl;
-            }
+            launchYoutubeVideo(video);
             stopSession();
             success = true;
             msg = "유튜브 영상 재생 및 대화 세션 종료 완료";
@@ -1424,9 +1410,32 @@ async function handleFunctionCall(event) {
   };
 }
 
-
-
-
+// 📱 유튜브 앱 직접 기동 및 팝업 우회 유틸리티 (PWA 완벽 대응)
+function launchYoutubeVideo(video) {
+  const videoIdMatch = (video.videoUrl || video.url || "").match(/(?:v=|\/embed\/|\/watch\?v=|\/vi\/|youtu\.be\/|\/v\/)([a-zA-Z0-9_-]{11})/);
+  const videoId = videoIdMatch ? videoIdMatch[1] : (video.id || "");
+  
+  if (videoId) {
+    const deepLink = `youtube://www.youtube.com/watch?v=${videoId}`;
+    const webFallbackUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    
+    console.log(`📡 [Deep Link] 유튜브 네이티브 앱 연동 시도: ${deepLink}`);
+    
+    // 모바일 PWA 환경에서 팝업 차단기를 완전히 우회하고 앱을 직접 기동하기 위해 location.href를 사용합니다.
+    window.location.href = deepLink;
+    
+    // 유튜브 앱이 깔려있지 않은 브라우저 환경 대응을 위한 1.5초 타이머 웹 폴백
+    setTimeout(() => {
+      if (document.visibilityState === "visible") {
+        console.log("⚠️ 유튜브 앱 미동작 감지. 웹 브라우저 주소로 폴백 이동합니다.");
+        window.location.href = webFallbackUrl;
+      }
+    }, 1500);
+  } else {
+    const fallbackUrl = video.videoUrl || video.url || "https://www.youtube.com";
+    window.location.href = fallbackUrl;
+  }
+}
 
 // 툴 호출 결과로 유튜브 위젯 카드를 직접 DOM 렌더링 (JSX 컴파일러 완전 우회)
 function renderYoutubeWidget(query, videos) {
@@ -1555,7 +1564,10 @@ function renderYoutubeWidget(query, videos) {
       </div>
     `;
 
-    item.onclick = () => window.open(videoUrl, "_blank");
+    item.onclick = () => {
+      launchYoutubeVideo(video);
+      stopSession();
+    };
     card.appendChild(item);
 
     // 비디오 사이 구분선 (마지막 제외)
