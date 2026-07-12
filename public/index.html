@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Youtube Finder</title>
+  <!-- Google Fonts (Outfit & JetBrains Mono) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- Vanilla CSS Stylesheet -->
+  <link rel="stylesheet" href="index.css">
+  <!-- Kakao Map SDK -->
+  <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=MOCK_KEY&libraries=services"></script>
+  <!-- Lottie Animation Web SDK -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+</head>
+<body>
+
+  <!-- xAI Cyberpunk Dark Background -->
+  <div class="sky-background">
+    <div class="blur-circle blue"></div>
+    <div class="blur-circle purple"></div>
+  </div>
+
+  <!-- 전체 레이아웃 (모바일 프리뷰 중심) -->
+  <div class="app-container">
+    
+    <!-- 1. 좌측: Widget 개발자 에디터 패널 (완전 비활성화) -->
+    <div class="editor-panel">
+      <header class="panel-header">
+        <div class="panel-title">
+          <span class="panel-icon">🛠️</span>
+          <h2>Widget Builder Console</h2>
+        </div>
+        <div class="tab-selectors">
+          <button class="tab-btn active" data-tab="template">Template (JSX)</button>
+          <button class="tab-btn" data-tab="data">Data (JSON)</button>
+          <button class="tab-btn" data-tab="schema">Schema (Zod)</button>
+        </div>
+      </header>
+
+      <div class="editor-body">
+        <div id="tab-content-template" class="tab-content">
+          <textarea id="jsx-template" spellcheck="false" placeholder="Write Widget JSX..."></textarea>
+        </div>
+        <div id="tab-content-data" class="tab-content hidden">
+          <textarea id="json-data" spellcheck="false" placeholder="Write JSON Data..."></textarea>
+        </div>
+        <div id="tab-content-schema" class="tab-content hidden">
+          <textarea id="zod-schema" spellcheck="false" readonly placeholder="Write Zod Schema..."></textarea>
+        </div>
+      </div>
+
+      <footer class="panel-footer">
+        <button id="compile-btn" class="action-btn compile">Compile & Float Widget 🚀</button>
+      </footer>
+    </div>
+
+    <!-- 2. 우측: Grok Premium 모바일 디바이스 프리뷰 -->
+    <div class="preview-panel">
+      <div class="device-frame">
+        <!-- 화면 중앙: 중첩 플로팅 카드 스택 레이어 -->
+        <main class="card-display-area">
+          <div id="card-stack" class="card-stack">
+            
+            <!-- 최초 웰컴 카드 -->
+            <div id="welcome-card" class="floating-card welcome">
+              <div id="lottie-logo" style="width: 80px; height: 80px; margin: 0 auto 0.8rem auto; display: flex; justify-content: center; align-items: center;"></div>
+              <h2>Youtube Finder</h2>
+              <p>마이크를 터치하고 원하는 트렌드나 키워드를 말해보세요. 실시간으로 최신 유튜브 영상을 검색하고 요약 브리핑하며, 텔레그램으로 즉시 아카이빙할 수 있습니다.</p>
+            </div>
+
+            <!-- 지도 카드 (동적 렌더링, 초기 숨김) -->
+            <div id="map-card" class="floating-card map hidden">
+              <div id="kakao-map" class="kakao-map-canvas"></div>
+              <div id="mock-map-fallback" class="mock-map-canvas-fallback hidden">
+                <svg id="mock-svg-path" width="100%" height="100%"></svg>
+              </div>
+            </div>
+
+          </div>
+        </main>
+
+        <!-- 플로팅 인디케이터 (상태 표시) - 하단 좌측 정렬 (노란색 원 위치) -->
+        <div style="position: absolute; left: 1.5rem; bottom: 3.0rem; z-index: 50; display: flex; align-items: center; justify-content: center; height: 32px; width: 32px; pointer-events: none;">
+          <span class="status-indicator disconnected" id="connection-status" title="연결 상태"></span>
+        </div>
+
+        <!-- 화면 하단: 오디오 비주얼라이저 (클릭하여 마이크 토글) -->
+        <section class="voice-interaction-area" style="position: relative; display: flex; justify-content: center; align-items: center; padding: 0;">
+          <div id="orb-mic-btn" class="orb-container" style="cursor: pointer; z-index: 10;" title="마이크 켜기/끄기">
+            <canvas id="audio-visualizer"></canvas>
+          </div>
+
+          <!-- 세션 취소(X) 버튼 (우측 플로팅) -->
+          <button id="cancel-btn" class="control-btn session-cancel hidden" aria-label="세션 종료" style="position: absolute; right: 1.1rem; bottom: 0.8rem; z-index: 20;">
+            <span class="btn-icon">✕</span>
+          </button>
+        </section>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Vanilla JS Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>

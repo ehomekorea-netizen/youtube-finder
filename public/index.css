@@ -1,0 +1,865 @@
+/* ==========================================================================
+    Emil Kowalski / Apple Studio Glassmorphism: Refined Fluid Glass
+   ========================================================================== */
+
+:root {
+  /* Apple Midnight Studio Color Palette */
+  --bg-sky-start: #020204;
+  --bg-sky-end: #07070b;
+  
+  /* Layers of Glass Opacities */
+  --panel-bg: rgba(10, 10, 15, 0.35); /* Extremely translucent for glass refraction */
+  --card-bg: rgba(255, 255, 255, 0.04);
+  
+  /*  Double-Layered Nano Glass Borders & Shadows */
+  --apple-glass-border: 1px solid rgba(255, 255, 255, 0.15);
+  
+  --apple-shadow: 
+    0 1px 1px rgba(0, 0, 0, 0.5),
+    0 12px 40px rgba(0, 0, 0, 0.65),
+    0 32px 90px rgba(0, 0, 0, 0.8),
+    inset 0 1px 1px rgba(255, 255, 255, 0.22), /* Apple Top Inner Glow (유리 단면 하이라이트) */
+    inset 0 -1px 2px rgba(0, 0, 0, 0.3);
+
+  --text-primary: #f5f5f7;
+  --text-secondary: #a1a1a6; /* iOS Standard Subtitle grey */
+  
+  /* Soft Pastel Accent Light (No Cyber Neons) */
+  --accent-blue: #007aff;
+  --accent-gold: rgba(212, 175, 55, 0.95); /* Champagne Gold */
+  --accent-indigo: rgba(147, 112, 219, 0.9); /* Midsummer Indigo */
+  
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif;
+  --font-mono: "SF Mono", monospace;
+  --apple-easing: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Global Reset */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-sky-end);
+  color: var(--text-primary);
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+}
+
+/* 1.  앰비언트 오로라 백라이트 (글래스 굴절을 위한 유기적 컬러 배치) */
+.sky-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #020205;
+  z-index: 1;
+  overflow: hidden;
+}
+
+/* 프로스트 글래스 하프톤 노이즈 질감 오버레이 */
+.sky-background::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.15) 1px, transparent 0);
+  background-size: 24px 24px;
+  opacity: 0.12;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.blur-circle {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(140px);
+  opacity: 0.22;
+  animation: float-slow 35s infinite alternate var(--apple-easing);
+  mix-blend-mode: screen;
+}
+
+/* 샴페인 골드 오로라 오브 */
+.blur-circle.blue {
+  width: 650px;
+  height: 650px;
+  background: radial-gradient(circle, rgba(212, 175, 55, 0.45) 0%, rgba(212, 175, 55, 0) 70%);
+  top: -10%;
+  left: 15%;
+}
+
+/* 미드나잇 인디고 퍼플 오로라 오브 */
+.blur-circle.purple {
+  width: 800px;
+  height: 800px;
+  background: radial-gradient(circle, rgba(147, 112, 219, 0.45) 0%, rgba(147, 112, 219, 0) 70%);
+  bottom: -20%;
+  right: 15%;
+  animation-delay: -12s;
+}
+
+/* 2. 전체 레이아웃 */
+.app-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100vw;
+  height: 100vh;
+  padding: 1.5rem;
+  z-index: 10;
+}
+
+/* 3. 에디터 패널 (비활성화) */
+.editor-panel {
+  display: none !important;
+}
+
+/* 4. 프리뷰 패널 */
+.preview-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+/*  iPhone / 스튜디오 디스플레이 실루엣 프리미엄 더블 글래스 프레임 */
+.device-frame {
+  position: relative;
+  width: 410px;
+  height: 100%;
+  max-height: 840px;
+  background: var(--panel-bg);
+  border: var(--apple-glass-border);
+  border-radius: 44px; /* iOS 스퀴클 */
+  box-shadow: var(--apple-shadow);
+  backdrop-filter: blur(55px) saturate(190%); /* 채도 상승을 통해 뒤쪽 색상 굴절 극대화 */
+  -webkit-backdrop-filter: blur(55px) saturate(190%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 1.2rem 1.1rem 0.5rem 1.1rem;
+  transition: all 0.5s var(--apple-easing);
+}
+
+/* 앱 헤더 ( Apple Studio Minimal Header) */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 35px;
+  margin-bottom: 1.2rem;
+  z-index: 15;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 0.8rem;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.status-indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  display: inline-block;
+  transition: all 0.5s var(--apple-easing);
+}
+
+.status-indicator.disconnected {
+  background: #ff453a; /* Apple iOS System Red */
+  box-shadow: 0 0 8px rgba(255, 69, 58, 0.5);
+}
+
+.status-indicator.connected {
+  background: #30d158; /* Apple iOS System Green */
+  box-shadow: 0 0 12px rgba(48, 209, 88, 0.7);
+  animation: green-pulse-glow 1.4s infinite ease-in-out;
+}
+
+.status-indicator.active {
+  background: #00f0ff; /* Cyberpunk Cyan */
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.8);
+  animation: cyan-pulse-glow 0.8s infinite ease-in-out;
+}
+
+.mode-text {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--text-primary);
+  opacity: 0.9;
+}
+
+.minimal-select {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.25rem 0.6rem;
+  border-radius: 20px;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.3s var(--apple-easing);
+  backdrop-filter: blur(10px);
+}
+
+.minimal-select:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* 카드 디스플레이 중앙 영역 */
+.card-display-area {
+  flex: 1;
+  width: 100%;
+  position: relative;
+  overflow-y: auto;
+  padding-top: 2.1rem;
+  padding-bottom: 0.8rem;
+  z-index: 12;
+}
+
+.card-display-area::-webkit-scrollbar {
+  display: none;
+}
+
+.card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  width: 100%;
+}
+
+/*  플로팅 카드 (Apple Studio Glass: 이중 보더 및 고반사 굴절 유리) */
+.floating-card {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 30px; /* iOS 스퀴클 */
+  box-shadow: 
+    0 10px 30px rgba(0, 0, 0, 0.4),
+    inset 0 1px 1px rgba(255, 255, 255, 0.25); /* 상단 입체 하이라이트 */
+  padding: 1.45rem;
+  width: 100%;
+  animation: slideInUp 0.6s var(--apple-easing) forwards;
+  transition: all 0.4s var(--apple-easing);
+  backdrop-filter: blur(45px) saturate(190%);
+  -webkit-backdrop-filter: blur(45px) saturate(190%);
+}
+
+.floating-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.22);
+  transform: translateY(-2px);
+  box-shadow: 
+    0 16px 40px rgba(0, 0, 0, 0.5),
+    inset 0 1px 1px rgba(255, 255, 255, 0.35);
+}
+
+/*  웰컴 카드 (Apple TV+ 프리미엄 다크 슬레이트 글래스) */
+.floating-card.welcome {
+  text-align: center;
+  padding: 2.8rem 1.6rem;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: var(--apple-shadow);
+}
+
+.welcome-icon {
+  font-size: 2.8rem;
+  margin-bottom: 1rem;
+  animation: float-slow 6s ease-in-out infinite alternate;
+}
+
+.floating-card.welcome h2 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 0.6rem;
+  letter-spacing: -0.5px;
+}
+
+.floating-card.welcome p {
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+/*  하단 제어 영역 (iOS Dock 스타일 부유형 패널) */
+.voice-interaction-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 1.2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  z-index: 15;
+  position: relative;
+}
+
+.orb-container {
+  width: 100%;
+  height: 50px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0px;
+  overflow: hidden;
+}
+
+#audio-visualizer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  filter: drop-shadow(0 0 10px rgba(46, 237, 214, 0.35));
+}
+
+.interaction-hint {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-bottom: 1.2rem;
+  letter-spacing: -0.1px;
+}
+
+/*  iOS Dock 스타일 하단 컨트롤 바 */
+.bottom-control-bar {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  height: 55px;
+}
+
+.control-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+  transition: all 0.4s var(--apple-easing);
+  backdrop-filter: blur(10px);
+}
+
+.mic-toggle {
+  background: var(--accent-yt-red);
+  color: white;
+  box-shadow: 0 8px 24px rgba(255, 59, 48, 0.3);
+  border-color: rgba(255, 59, 48, 0.2);
+}
+
+.mic-toggle:hover {
+  transform: scale(1.08);
+  box-shadow: 0 12px 30px rgba(255, 59, 48, 0.5);
+}
+
+.mic-toggle.connected {
+  background: var(--accent-mint) !important;
+  color: #05060b !important;
+  box-shadow: 0 8px 24px rgba(46, 237, 214, 0.4) !important;
+  border-color: rgba(46, 237, 214, 0.3) !important;
+}
+
+.mic-toggle.connected:hover {
+  box-shadow: 0 12px 30px rgba(46, 237, 214, 0.6) !important;
+}
+
+/* 세션 취소(X) 버튼 (iOS 스타일) */
+.session-cancel {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.session-cancel:hover {
+  transform: scale(1.08);
+  background: rgba(255, 59, 48, 0.1);
+  border-color: var(--accent-yt-red);
+  box-shadow: 0 6px 20px rgba(255, 0, 60, 0.3);
+}
+
+.btn-icon {
+  font-size: 1.1rem;
+}
+
+/* ==========================================
+   🛠️ AGENTS.md Widget UI 컴포넌트 실물 스타일셋
+   ========================================== */
+
+/* ListView & Item */
+.widget-listview {
+  display: flex;
+  flex-direction: column;
+  background: var(--card-bg);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 28px;
+  box-shadow: var(--card-shadow);
+  padding: 0.8rem 0;
+  width: 100%;
+  overflow: hidden;
+  animation: slideInUp 0.5s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+}
+
+.widget-listview-item {
+  display: flex;
+  align-items: center;
+  padding: 0.8rem 1.2rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  transition: background 0.2s ease;
+  cursor: pointer;
+}
+
+.widget-listview-item:last-child {
+  border-bottom: none;
+}
+
+.widget-listview-item:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+/* Layout primitives */
+.widget-box, .widget-row, .widget-col {
+  display: flex;
+  transition: all 0.3s ease;
+}
+
+.widget-box {
+  flex-direction: column; /* Box default */
+}
+
+.widget-row {
+  flex-direction: row;
+  align-items: center; /* Row default */
+}
+
+.widget-col {
+  flex-direction: column;
+}
+
+.widget-divider {
+  width: 100%;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.06);
+  margin: 0.8rem 0;
+}
+
+.widget-divider.flush {
+  margin-left: -1.2rem;
+  margin-right: -1.2rem;
+  width: calc(100% + 2.4rem);
+}
+
+.widget-spacer {
+  flex: 1;
+}
+
+/* Text components */
+.widget-title {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.1;
+  letter-spacing: -0.8px;
+}
+
+.widget-title.size-3xl { font-size: 3.6rem; font-weight: 300; } /* 72도 웅장하고 세련된 폰트 */
+.widget-title.size-2xl { font-size: 1.8rem; font-weight: 400; }
+.widget-title.size-xl { font-size: 1.4rem; font-weight: 600; }
+.widget-title.size-lg { font-size: 1.25rem; font-weight: 700; }
+.widget-title.size-md { font-size: 0.95rem; font-weight: 700; }
+.widget-title.size-sm { font-size: 0.85rem; font-weight: 700; }
+
+.widget-text {
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  line-height: 1.45;
+  letter-spacing: -0.3px;
+}
+
+.widget-text.size-sm { font-size: 0.78rem; opacity: 0.9; }
+.widget-text.size-lg { font-size: 1rem; }
+.widget-text.color-secondary { color: var(--text-secondary); }
+.widget-text.color-tertiary { color: #94a3b8; }
+.widget-text.color-white { color: rgba(255, 255, 255, 0.9); }
+
+.widget-caption {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+  opacity: 0.8;
+}
+
+.widget-caption.size-lg {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+/* Badge & Image & Button */
+.widget-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-secondary);
+}
+
+.widget-image {
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+.widget-button {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.4rem 1rem;
+  border-radius: 20px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.widget-button.style-primary {
+  background: var(--accent-blue);
+  color: white;
+}
+
+.widget-button.style-secondary {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-primary);
+}
+
+.widget-button.variant-outline {
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  color: var(--text-secondary);
+}
+
+.widget-button.variant-outline:hover {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.floating-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.04);
+  padding-top: 0.8rem;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Animations */
+@keyframes float-slow {
+  0% { transform: translateY(0px); }
+  100% { transform: translateY(-12px); }
+}
+
+@keyframes morph {
+  0% { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+  50% { border-radius: 35% 65% 65% 35% / 50% 60% 40% 50%; }
+  100% { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(35px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ==========================================================
+   ✨ Premium Dark Theme Widget Overrides (Youtube/Netflix Mode)
+   ========================================================== */
+.floating-card[style*="background"] .widget-listview,
+.floating-card[style*="linear-gradient"] .widget-listview {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: none !important;
+}
+
+.floating-card[style*="background"] .widget-listview-item,
+.floating-card[style*="linear-gradient"] .widget-listview-item {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.floating-card[style*="background"] .widget-listview-item:hover,
+.floating-card[style*="linear-gradient"] .widget-listview-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.floating-card[style*="background"] .widget-divider,
+.floating-card[style*="linear-gradient"] .widget-divider {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.floating-card[style*="background"] .widget-title,
+.floating-card[style*="linear-gradient"] .widget-title {
+  color: #ffffff !important;
+}
+
+.floating-card[style*="background"] .widget-text,
+.floating-card[style*="linear-gradient"] .widget-text {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.floating-card[style*="background"] .widget-caption,
+.floating-card[style*="linear-gradient"] .widget-caption {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.floating-card[style*="background"] .widget-badge,
+.floating-card[style*="linear-gradient"] .widget-badge {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
+.floating-card[style*="background"] .widget-button.variant-outline,
+.floating-card[style*="linear-gradient"] .widget-button.variant-outline {
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.floating-card[style*="background"] .widget-button.style-primary,
+.floating-card[style*="linear-gradient"] .widget-button.style-primary {
+  background: #ff0000 !important; /* 유튜브 레드로 튜닝 */
+  color: #ffffff !important;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/*  Apple LED Pulse Animation (Minimal Silver Glow) */
+@keyframes pulse-glow {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.25);
+  }
+  100% {
+    transform: scale(1.1);
+    box-shadow: 0 0 16px rgba(255, 255, 255, 0.45);
+  }
+}
+
+@keyframes green-pulse-glow {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 4px rgba(48, 209, 88, 0.5);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.3);
+    box-shadow: 0 0 16px rgba(48, 209, 88, 0.95);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 4px rgba(48, 209, 88, 0.5);
+    opacity: 0.7;
+  }
+}
+
+@keyframes cyan-pulse-glow {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 4px rgba(0, 240, 255, 0.5);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.35);
+    box-shadow: 0 0 18px rgba(0, 240, 255, 0.95);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 4px rgba(0, 240, 255, 0.5);
+    opacity: 0.8;
+  }
+}
+
+/* 💬 카카오톡 스타일 음성 대화 말풍선 (Cyberpunk Glassmorphism UI) */
+.chat-bubble {
+  display: flex;
+  flex-direction: column;
+  max-width: 82%;
+  padding: 1.1rem 1.4rem;
+  margin-bottom: 1rem;
+  animation: springIn 0.5s var(--apple-easing) forwards;
+  backdrop-filter: blur(40px) saturate(200%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  position: relative;
+  line-height: 1.6;
+  font-size: 0.92rem;
+  letter-spacing: -0.3px;
+  border-radius: 24px;
+}
+
+/* 사용자 말풍선 (우측 정렬, Cyber Neon Blue Glass) */
+.chat-bubble.user {
+  align-self: flex-end;
+  border-radius: 24px 24px 4px 24px;
+  background: linear-gradient(135deg, rgba(0, 112, 243, 0.25), rgba(0, 240, 255, 0.15));
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  color: #ffffff;
+  box-shadow: 
+    0 10px 30px rgba(0, 112, 243, 0.2),
+    inset 0 1px 2px rgba(255, 255, 255, 0.4),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.chat-bubble.user .bubble-speaker {
+  color: #00f0ff; 
+  font-weight: 800;
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.5);
+}
+
+/* Grok 말풍선 (좌측 정렬, Cyber Dark Slate Glass) */
+.chat-bubble.grok {
+  align-self: flex-start;
+  border-radius: 24px 24px 24px 4px;
+  background: linear-gradient(135deg, rgba(30, 30, 35, 0.6), rgba(15, 15, 20, 0.8));
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #f5f5f7;
+  box-shadow: 
+    0 10px 30px rgba(0, 0, 0, 0.5),
+    0 0 20px rgba(0, 255, 255, 0.05),
+    inset 0 1px 2px rgba(255, 255, 255, 0.2),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.chat-bubble.grok .bubble-speaker {
+  color: var(--text-secondary);
+}
+
+.bubble-speaker {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 0.35rem;
+}
+
+.bubble-content {
+  word-break: break-all;
+  white-space: pre-wrap;
+  font-weight: 500;
+  font-size: 0.86rem;
+}
+
+/* 🎥 emilkowalski/skills: 3도트 바운싱 타이핑 로더 (Silver White Dots) */
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 10px;
+  padding: 4px 2px 0 2px;
+}
+
+.typing-dots span {
+  width: 5px;
+  height: 5px;
+  background: #ffffff; /* 네온 민트 제거 ➡️ 퓨어 화이트 */
+  border-radius: 50%;
+  opacity: 0.3;
+  animation: emilBounce 1.2s infinite cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.typing-dots span:nth-child(1) { animation-delay: 0s; }
+.typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes emilBounce {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateY(-4px);
+    opacity: 0.85;
+    background: #ffffff;
+    box-shadow: 0 0 6px rgba(255, 255, 255, 0.4);
+  }
+}
+
+/* ▎ 타이핑 네온 커서 바 효과 (Onyx White) */
+.typing-cursor::after {
+  content: "▎";
+  color: #ffffff; /* 화이트로 리디자인 */
+  font-weight: 900;
+  margin-left: 2px;
+  animation: cursorBlink 0.6s infinite steps(2, start);
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
+}
+
+@keyframes springIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 유튜브 전용 카드 패딩 대폭 축소 */
+.floating-card.youtube-card {
+  padding: 0.95rem 0.95rem 0.65rem 0.95rem;
+  border-radius: 24px;
+}
+
+/* 개별 영상 텔레그램 공유 버튼 호버 및 클릭 액션 */
+.telegram-share-btn:hover {
+  transform: scale(1.15);
+  background: #0099e6 !important;
+}
+.telegram-share-btn:active {
+  transform: scale(0.92);
+}

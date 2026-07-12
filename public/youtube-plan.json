@@ -1,0 +1,21 @@
+{
+  "widgetName": "youtube-search-result",
+  "version": "1.0.0",
+  "schema": "import { z } from \"zod\";\n\nconst WidgetState = z.strictObject({\n  searchQuery: z.string(),\n  video1_title: z.string(),\n  video1_channel: z.string(),\n  video1_thumbnail: z.string(),\n  video1_url: z.string(),\n  video2_title: z.string(),\n  video2_channel: z.string(),\n  video2_thumbnail: z.string(),\n  video2_url: z.string(),\n  video3_title: z.string(),\n  video3_channel: z.string(),\n  video3_thumbnail: z.string(),\n  video3_url: z.string(),\n});\n\nexport default WidgetState;",
+  "template": "<Card size=\"sm\" theme=\"light\" confirmLabel=\"카카오톡 나와의 채팅방 전송\" confirmAction=\"kakaomcp_send_to_me\">\n  <Col gap={3}>\n    <Row justify=\"space-between\" align=\"center\">\n      <Title value=\"추천 영상 목록\" size=\"md\" />\n      <Badge label={searchQuery} />\n    </Row>\n    <Divider flush=\"true\" />\n    <ListView>\n      <ListViewItem>\n        <Row gap={3}>\n          <Image src={video1_thumbnail} size={48} radius=\"md\" />\n          <Col>\n            <Text value={video1_title} weight=\"bold\" size=\"sm\" />\n            <Caption value={video1_channel} />\n          </Col>\n        </Row>\n      </ListViewItem>\n      <ListViewItem>\n        <Row gap={3}>\n          <Image src={video2_thumbnail} size={48} radius=\"md\" />\n          <Col>\n            <Text value={video2_title} weight=\"bold\" size=\"sm\" />\n            <Caption value={video2_channel} />\n          </Col>\n        </Row>\n      </ListViewItem>\n      <ListViewItem>\n        <Row gap={3}>\n          <Image src={video3_thumbnail} size={48} radius=\"md\" />\n          <Col>\n            <Text value={video3_title} weight=\"bold\" size=\"sm\" />\n            <Caption value={video3_channel} />\n          </Col>\n        </Row>\n      </ListViewItem>\n    </ListView>\n  </Col>\n</Card>",
+  "data": {
+    "searchQuery": "AI 에이전트 혁명",
+    "video1_title": "AI 에이전트가 바꿀 우리의 미래 (10분 정리)",
+    "video1_channel": "테크나우 TechNow",
+    "video1_thumbnail": "https://img.youtube.com/vi/F3P4Q4zX9F0/hqdefault.jpg",
+    "video1_url": "https://www.youtube.com/watch?v=F3P4Q4zX9F0",
+    "video2_title": "OpenAI Realtime API 실전 코딩 가이드",
+    "video2_channel": "코드팩토리 CodeFactory",
+    "video2_thumbnail": "https://img.youtube.com/vi/J_Vv9_kF9g0/hqdefault.jpg",
+    "video2_url": "https://www.youtube.com/watch?v=J_Vv9_kF9g0",
+    "video3_title": "PlayMCP를 활용한 카카오톡 자동화 봇 만들기",
+    "video3_channel": "개발자 데브린 DevLynn",
+    "video3_thumbnail": "https://img.youtube.com/vi/Zp9h5pXw2lQ/hqdefault.jpg",
+    "video3_url": "https://www.youtube.com/watch?v=Zp9h5pXw2lQ"
+  }
+}
