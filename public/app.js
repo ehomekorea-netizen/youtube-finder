@@ -941,11 +941,44 @@ async function sendSessionUpdate() {
     }
   }
 
-  // 💡 마이크가 활성화된 상태에서 바로 로컬 웰컴 멘트를 재생합니다.
-  welcomeAudio.play().catch(err => {
-    console.warn("웰컴 MP3 재생 실패 (사용자 상호작용 제약):", err);
-  });
-  console.log("📤 로컬 welcome.mp3 재생 시작 및 마이크 선제 가동 완료");
+  // 💡 모션 지연 최적화: 화면 전환 완료 후 자연스럽게 그록이 대답하며 소리가 나오도록 500ms 지연 재생 및 타이핑 효과 시작
+  setTimeout(() => {
+    if (!isRecording) return; // 세션이 중간에 취소된 경우 중단
+    
+    // 웰컴 카드를 숨겨 화면을 초기화
+    if (welcomeCard) welcomeCard.classList.add("hidden");
+
+    // 1. 그록 웰컴 말풍선 생성 및 타이핑 효과 시작
+    const welcomeText = "반갑습니다! 어떤 영상이 궁금하신가요?";
+    const welcomeBubble = createChatBubble("grok", true);
+    
+    let charIdx = 0;
+    const typeInterval = setInterval(() => {
+      if (!isRecording) {
+        clearInterval(typeInterval);
+        return;
+      }
+      if (charIdx < welcomeText.length) {
+        welcomeBubble.querySelector(".bubble-content").innerText += welcomeText[charIdx];
+        charIdx++;
+        // 스크롤 동기화
+        const scrollArea = document.querySelector(".card-display-area");
+        if (scrollArea) scrollArea.scrollTo({ top: scrollArea.scrollHeight, behavior: 'smooth' });
+      } else {
+        clearInterval(typeInterval);
+        welcomeBubble.classList.remove("typing-cursor");
+      }
+    }, 45); // 글자당 45ms 타이핑 속도
+
+    // 2. 웰컴 오디오 재생 (음소거 확실히 풀고 재생)
+    if (welcomeAudio) {
+      welcomeAudio.muted = false;
+      welcomeAudio.play().catch(err => {
+        console.warn("웰컴 MP3 재생 실패 (사용자 상호작용 제약):", err);
+      });
+    }
+    console.log("📤 로컬 welcome.mp3 지연 재생 및 타이핑 가동 완료");
+  }, 500);
 }
 
 // --- 마이크 캡처 → PCM16 base64 → WebSocket 전송 ---
@@ -1768,17 +1801,20 @@ function initAudioContextsOnGesture() {
   source.connect(playbackCtx.destination);
   source.start(0);
 
-  // 💡 iOS Safari 대응: 제스처 이벤트 내에서 웰컴 오디오 객체를 임시 재생해 브라우저 오디오 재생 제약을 완전히 풉니다.
+  // 💡 iOS Safari 대응: 제스처 이벤트 내에서 웰컴 오디오 객체를 음소거(Muted) 상태로 임시 재생해 브라우저 오디오 재생 제약을 완전히 풉니다.
   if (!welcomeAudio) {
     welcomeAudio = new Audio("/welcome.mp3");
   }
+  welcomeAudio.muted = true; // 소리 누출 및 중복 재생 방지용 임시 음소거
   const playPromise = welcomeAudio.play();
   if (playPromise !== undefined) {
     playPromise.then(() => {
       welcomeAudio.pause();
       welcomeAudio.currentTime = 0;
+      welcomeAudio.muted = false; // 복구
     }).catch(e => {
       console.log("🔊 iOS Audio Whitelist unlocked:", e.message);
+      welcomeAudio.muted = false;
     });
   }
 }
