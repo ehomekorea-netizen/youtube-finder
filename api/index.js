@@ -23,6 +23,17 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "../public")));
 
+// 🩺 환경변수 점검용 Diagnostic Endpoint (마스킹 적용)
+app.get("/api/diag", (req, res) => {
+  const mask = (val) => val ? `${val.substring(0, 4)}*** (길이: ${val.length})` : "❌ 미설정";
+  return res.json({
+    YOUTUBE_API_KEY: mask(process.env.YOUTUBE_API_KEY),
+    XAI_API_KEY: mask(process.env.XAI_API_KEY),
+    TELEGRAM_BOT_TOKEN: mask(process.env.TELEGRAM_BOT_TOKEN),
+    TELEGRAM_CHAT_ID: mask(process.env.TELEGRAM_CHAT_ID)
+  });
+});
+
 // 1. xAI Grok Realtime Ephemeral Token 발급 Endpoint (가성비 Grok 단독 모드)
 app.post("/api/session", async (req, res) => {
   const apiKey = process.env.XAI_API_KEY ? process.env.XAI_API_KEY.trim() : null;
