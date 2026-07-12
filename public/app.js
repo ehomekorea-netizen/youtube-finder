@@ -695,6 +695,17 @@ async function toggleSession() {
 
 async function startSession() {
   try {
+    // 🎙️ 모바일 웹앱 대응: 오디오 비주얼라이저 클릭 즉시 브라우저 마이크 승인 팝업 노출
+    try {
+      const permissionStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // 권한 승인 시 즉시 임시 트랙 정지 (실제 녹음은 세션 시작 후 VAD로 가동)
+      permissionStream.getTracks().forEach(track => track.stop());
+    } catch (micErr) {
+      console.warn("🎙️ 마이크 권한이 없거나 차단됨:", micErr);
+      alert("마이크 사용 권한이 필요합니다. 브라우저 설정이나 메신저 우측 하단 메뉴에서 마이크를 허용해 주세요.");
+      return;
+    }
+
     // 💡 새로운 세션 시작 시 이전 검색 결과를 소거하고 초기 웰컴 상태로 완전히 리셋
     resetUI(false);
     resetIdleTimer();
@@ -900,29 +911,19 @@ async function sendSessionUpdate() {
     }
   }
 
-  // 💡 에코/피드백 루프 방지: 웰컴 오디오가 안전하게 완전히 종료된 후에 비소로 마이크 및 음성 인식을 활성화합니다.
+  // 💡 에코/피드백 루프 방지: 웰컴 오디오가 안전하게 완전히 종료된 후에 비소로 실시간 VAD 마이크 스트리밍을 활성화합니다.
   welcomeAudio.onended = () => {
-    console.log("🔊 웰컴 오디오 재생 완료. 마이크 및 음성 인식 가동.");
+    console.log("🔊 웰컴 오디오 재생 완료. 실시간 마이크(VAD) 기동.");
     if (ws && ws.readyState === WebSocket.OPEN) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        startMicCapture();
-      } else {
-        startOnboardingSpeechRecognition();
-      }
+      startMicCapture();
     }
   };
 
   welcomeAudio.play().catch(err => {
     console.warn("웰컴 MP3 재생 실패 (사용자 상호작용 제약):", err);
-    // 재생 실패 시 즉시 마이크/STT 가동
+    // 재생 실패 시 즉시 마이크 기동
     if (ws && ws.readyState === WebSocket.OPEN) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        startMicCapture();
-      } else {
-        startOnboardingSpeechRecognition();
-      }
+      startMicCapture();
     }
   });
   console.log("📤 로컬 welcome.mp3 재생 완료 (xAI API 발화 생량)");
