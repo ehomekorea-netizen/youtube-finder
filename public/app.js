@@ -1731,6 +1731,9 @@ function updateUIForConnectedState() {
   cancelBtn.classList.remove("hidden");
   if (typeof chatInput !== "undefined" && chatInput) chatInput.placeholder = "대화 중...";
   if (micBtn) micBtn.disabled = false;
+  
+  // 💡 연결 즉시 로띠 로고 및 웰컴 로비 카드를 가려 챗 및 비주얼라이저 시야를 확보
+  if (welcomeCard) welcomeCard.classList.add("hidden");
 }
 
 function resetUI(keepCards = false) {
@@ -1739,6 +1742,11 @@ function resetUI(keepCards = false) {
   if (typeof chatInput !== "undefined" && chatInput) chatInput.placeholder = "음성 비서에게 물어보기";
   if (micBtn) micBtn.disabled = false;
   if (typeof modeDisplay !== "undefined" && modeDisplay) modeDisplay.innerText = "Mock Mode";
+
+  // 💡 완전히 첫 리셋 상태면 웰컴 로비 카드와 로띠를 다시 활성화
+  if (!keepCards && welcomeCard) {
+    welcomeCard.classList.remove("hidden");
+  }
 
   // 말풍선 및 타이핑 큐 초기화
   currentUserBubble = null;
