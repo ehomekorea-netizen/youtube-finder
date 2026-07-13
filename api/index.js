@@ -143,28 +143,67 @@ app.post("/api/mcp-gateway", async (req, res) => {
       cleanQuery = cleanQuery.substring(0, 30);
     }
     const query = cleanQuery;
-    console.log(`🔍 [Query Sanitized] '${originalQuery}' ➡️ '${query}' (최신순 필터 전송)`);
+    console.log(`🔍 [Query Sanitized] '${originalQuery}' ➡️ '${query}'`);
     
     const ytApiKey = process.env.YOUTUBE_API_KEY;
     
-    // ── 1단계: 공식 YouTube Data API v3 실시간 검색 ──
+    // ── 1단계: 공식 YouTube Data API v3 실시간 검색 (3단계 피스톤 구조) ──
     if (ytApiKey) {
       try {
-        let searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=20&order=date&relevanceLanguage=ko&key=${ytApiKey}`;
-        let ytRes = await fetch(searchUrl);
         let ytData = null;
+        let selectedSource = "youtube_api_3m";
 
+        // [1차 시도] 최근 3개월 이내 + 연관성순
+        const date3MonthsAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+        console.log(`📡 [YouTube API 1차] 최근 3개월 이내 연관성 검색 기동 (${date3MonthsAgo.split('T')[0]} 이후)`);
+        let searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=25&order=relevance&publishedAfter=${date3MonthsAgo}&relevanceLanguage=ko&key=${ytApiKey}`;
+        let ytRes = await fetch(searchUrl);
         if (ytRes.ok) {
-          ytData = await ytRes.json();
+          const temp = await ytRes.json();
+          if (temp.items && temp.items.length >= 3) {
+            ytData = temp;
+            selectedSource = "youtube_api_3m";
+          }
         }
 
-        // 💡 최신순(date) 결과가 없거나 적으면 즉시 관련성순(relevance)으로 2차 자동 검색 시도!
-        if (!ytData || !ytData.items || ytData.items.length < 3) {
-          console.log("⚠️ 최신순 검색 결과가 부족함. 관련성(relevance) 우선순으로 재검색합니다.");
-          searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=20&order=relevance&relevanceLanguage=ko&key=${ytApiKey}`;
+        // [2차 시도] 3개월 결과 부족 시 -> 최근 6개월 이내 + 연관성순
+        if (!ytData) {
+          const date6MonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
+          console.log(`📡 [YouTube API 2차] 최근 6개월 이내 연관성 검색 기동 (${date6MonthsAgo.split('T')[0]} 이후)`);
+          searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=25&order=relevance&publishedAfter=${date6MonthsAgo}&relevanceLanguage=ko&key=${ytApiKey}`;
+          ytRes = await fetch(searchUrl);
+          if (ytRes.ok) {
+            const temp = await ytRes.json();
+            if (temp.items && temp.items.length >= 3) {
+              ytData = temp;
+              selectedSource = "youtube_api_6m";
+            }
+          }
+        }
+
+        // [3차 시도] 6개월 결과 부족 시 -> 최근 1년 이내 + 연관성순
+        if (!ytData) {
+          const date1YearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+          console.log(`📡 [YouTube API 3차] 최근 1년 이내 연관성 검색 기동 (${date1YearAgo.split('T')[0]} 이후)`);
+          searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=25&order=relevance&publishedAfter=${date1YearAgo}&relevanceLanguage=ko&key=${ytApiKey}`;
+          ytRes = await fetch(searchUrl);
+          if (ytRes.ok) {
+            const temp = await ytRes.json();
+            if (temp.items && temp.items.length > 0) {
+              ytData = temp;
+              selectedSource = "youtube_api_1y";
+            }
+          }
+        }
+
+        // [최종 폴백] 1년 이내 결과도 부족 시 -> 기간 필터 없이 전체 관련성 최우선 검색
+        if (!ytData) {
+          console.log(`📡 [YouTube API 최종 폴백] 기간 필터 해제 및 연관성 최우선 검색 기동`);
+          searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=25&order=relevance&relevanceLanguage=ko&key=${ytApiKey}`;
           ytRes = await fetch(searchUrl);
           if (ytRes.ok) {
             ytData = await ytRes.json();
+            selectedSource = "youtube_api_all";
           }
         }
 
@@ -204,16 +243,12 @@ app.post("/api/mcp-gateway", async (req, res) => {
               })
               .slice(0, 3);
               
-              // 💡 3개가 아니더라도 1개 이상의 검색 결과가 존재하면 즉각 반환! (기존의 strict 3개 제한 완화)
               if (videos.length > 0) {
-                console.log(`✅ [YouTube API] 공식 실시간 검색 성공: ${videos.length}개 결과 반환`);
-                return res.json({ success: true, videos, source: "youtube_api" });
+                console.log(`✅ [YouTube API] 공식 실시간 검색 성공 (${selectedSource}): ${videos.length}개 결과 반환`);
+                return res.json({ success: true, videos, source: selectedSource });
               }
             }
           }
-        } else if (ytRes && !ytRes.ok) {
-          const errText = await ytRes.text();
-          console.error("❌ [YouTube API Error Response]:", errText);
         }
       } catch (err) {
         console.warn(`⚠️ [YouTube API] 호출 에러: ${err.message}, 스크래핑 단계로 폴백`);
@@ -222,8 +257,9 @@ app.post("/api/mcp-gateway", async (req, res) => {
     
     // ── 2단계: 유튜브 표준 오픈 그래프(Open Graph) & itemprop 메타 태그 기반 정밀 파서 + 한국Lock 최신순 정렬 ──
     try {
-      console.log(`📡 [YouTube Scraper] 오픈 그래프/메타 태그 검색 기동 (한국 Lock 최신순 필터): '${originalQuery}'`);
-      const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=EgIQAQ%253D%253D&gl=KR&hl=ko`;
+      console.log(`📡 [YouTube Scraper] 오픈 그래프/메타 태그 검색 기동 (최근 1년 필터): '${originalQuery}'`);
+      // sp=EgQIAxAB: 유튜브 공식 필터값 (올해 업로드된 동영상 + 연관성 정렬)
+      const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=EgQIAxAB&gl=KR&hl=ko`;
       const response = await fetch(searchUrl, {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
