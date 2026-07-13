@@ -13,8 +13,8 @@
       "transcription": { "language_hint": "ko" }
     },
     "output": {
-      "format": { "type": "audio/pcm", "rate": 48000 },
-      "speed": 1.2
+      "format": { "type": "audio/pcm", "rate": 24000 },
+      "speed": 1.0
     }
   }
 }
