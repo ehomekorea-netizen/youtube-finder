@@ -1294,13 +1294,26 @@ async function handleFunctionCall(event) {
     showToast(`"${args.title}" 텔레그램 전송 완료!`);
   }
 
-  // 함수 호출 결과를 모델에게 반환
+  // 함수 호출 결과를 모델에게 반환 (컨텍스트 절약: youtube 결과는 브리핑용 최소 정보만 전달)
+  let outputPayload = result;
+  if (name === "youtube_search_videos" && result.success && result.videos) {
+    outputPayload = {
+      success: true,
+      videos: result.videos.map((v, i) => ({
+        index: i + 1,
+        title: v.title,
+        channel: v.channelTitle,
+        duration: v.duration,
+        views: v.viewCount
+      }))
+    };
+  }
   ws.send(JSON.stringify({
     type: "conversation.item.create",
     item: {
       type: "function_call_output",
       call_id: call_id,
-      output: JSON.stringify(result)
+      output: JSON.stringify(outputPayload)
     }
   }));
   ws.send(JSON.stringify({ type: "response.create" }));
@@ -1371,12 +1384,26 @@ async function handleFunctionCall(event) {
           showToast(`"${args.title}" 텔레그램 전송 완료!`);
         }
 
+        // WebRTC 컨텍스트 절약: youtube 결과는 브리핑용 최소 정보만 전달
+        let rtcOutputPayload = result;
+        if (name === "youtube_search_videos" && result.success && result.videos) {
+          rtcOutputPayload = {
+            success: true,
+            videos: result.videos.map((v, i) => ({
+              index: i + 1,
+              title: v.title,
+              channel: v.channelTitle,
+              duration: v.duration,
+              views: v.viewCount
+            }))
+          };
+        }
         dataChannel.send(JSON.stringify({
           type: "conversation.item.create",
           item: {
             type: "function_call_output",
             call_id: call_id,
-            output: JSON.stringify(result)
+            output: JSON.stringify(rtcOutputPayload)
           }
         }));
         dataChannel.send(JSON.stringify({ type: "response.create" }));
@@ -1666,14 +1693,14 @@ function renderSearchErrorWidget(query, errorMessage) {
 function resetIdleTimer() {
   if (idleTimer) clearTimeout(idleTimer);
   
-  // 35초 동안 무반응이면 마이크를 켜둔 상태로 대기하며 불필요한 VAD 요금이 발생하는 것을 방지하기 위해 자동 세션 차단
+  // 15초 동안 무반응이면 마이크를 켜둔 상태로 대기하며 불필요한 VAD 요금이 발생하는 것을 방지하기 위해 자동 세션 차단
   idleTimer = setTimeout(() => {
     if (isRecording) {
-      console.log("⏰ [Idle Timeout] 35초 동안 대화가 없어 마이크 세션을 자동 차단합니다.");
+      console.log("⏰ [Idle Timeout] 15초 동안 대화가 없어 마이크 세션을 자동 차단합니다.");
       showToast("대기 시간이 초과되어 대화가 자동 종료되었습니다.");
       stopSession();
     }
-  }, 35000);
+  }, 15000);
 }
 
 function stopSession() {

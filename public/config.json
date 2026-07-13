@@ -1,11 +1,11 @@
 {
   "voice": "lumen",
-  "reasoning_effort": "high",
+  "reasoning_effort": "none",
   "welcome_message": "반갑습니다! 어떤 영상이 궁금하신가요?",
   "turn_detection": {
-    "threshold": 0.5,
+    "threshold": 0.75,
     "prefix_padding_ms": 333,
-    "silence_duration_ms": 400
+    "silence_duration_ms": 600
   },
   "audio": {
     "input": {
