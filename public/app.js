@@ -2353,6 +2353,9 @@ function startOnboardingSpeechRecognition() {
     return;
   }
   
+  // 사용자가 무엇을 말해야 하는지 예시 가이드를 화면 상단에 깔끔하게 노출
+  showToast("🎙️ 마이크 켜짐! '손흥민 골 보여줘' 라고 말씀해 보세요.");
+  
   if (recognition) {
     try { recognition.abort(); } catch(e) {}
   }
@@ -2489,8 +2492,11 @@ function showToast(message) {
     gap: 8px;
     animation: toastFadeIn 0.4s var(--apple-easing) forwards;
   `;
+  // 첫 글자가 이모지 계열일 경우 중복 처리를 방지하기 위해 이모지가 포함되지 않았을 때만 기본 🔍 표시
+  const showDefaultIcon = !message.startsWith("🎙️") && !message.startsWith("🔍") && !message.startsWith("🎬") && !message.startsWith("⚠️") && !message.startsWith("❌");
+  
   toast.innerHTML = `
-    <span style="color:#00f0ff; animation: pulse 1.5s infinite;">🔍</span>
+    ${showDefaultIcon ? '<span style="color:#00f0ff; animation: pulse 1.5s infinite;">🔍</span>' : ''}
     <span>${message}</span>
   `;
   
@@ -2504,7 +2510,7 @@ function showToast(message) {
   setTimeout(() => {
     toast.style.animation = "toastFadeOut 0.4s var(--apple-easing) forwards";
     setTimeout(() => toast.remove(), 400);
-  }, 2500);
+  }, 4500); // 4.5초 동안 노출하여 대화 예시 가이드를 편안하게 읽을 수 있게 함
 }
 
 // 🎬 유튜브 로고 로띠 애니메이션 로더
