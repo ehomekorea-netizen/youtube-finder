@@ -771,8 +771,8 @@ async function startRealtimeSession(clientToken) {
     console.log("🔌 xAI Grok Realtime WebSocket 연결 성공!");
     await sendSessionUpdate();
     
-    // 온보딩 가이드 타이핑 노출
-    showOnboardingGrokBubble();
+    // 웰컴 음성/메시지 없이 즉시 음성인식(STT) 기동하여 쾌적한 사용성 보장
+    startOnboardingSpeechRecognition();
   };
 
   ws.onmessage = (e) => {
@@ -909,43 +909,6 @@ async function sendSessionUpdate() {
   };
   ws.send(JSON.stringify(sessionUpdate));
   console.log("📤 session.update 전송 완료 (WebSocket)");
-
-  // 💡 실시간 API 비용을 절약하기 위해, 준비된 로컬 welcome.mp3 파일을 웹브라우저에서 직접 재생하고 비주얼라이저에 바인딩합니다.
-  if (!welcomeAudio) {
-    welcomeAudio = new Audio("/welcome.mp3");
-  } else {
-    welcomeAudio.src = "/welcome.mp3";
-  }
-
-  // 중복 바인딩으로 인한 Web Audio API InvalidStateError 방지
-  if (!welcomeAudio.hasMediaElementSource) {
-    if (playbackCtx) {
-      try {
-        const sourceNode = playbackCtx.createMediaElementSource(welcomeAudio);
-        sourceNode.connect(playbackCtx.destination);
-        if (grokAnalyser) {
-          sourceNode.connect(grokAnalyser);
-        }
-        welcomeAudio.hasMediaElementSource = true;
-      } catch (e) {
-        console.warn("⚠️ WebAudio MediaElementSource 바인딩 실패:", e);
-      }
-    }
-  }
-
-  // 💡 웰컴 오디오 완료 이벤트 핸들러 (웰컴 음성 안내가 완전히 끝나는 즉시 마이크/STT 가동)
-  welcomeAudio.onended = () => {
-    console.log("🔊 웰컴 오디오 재생 완료. 온보딩용 WebSpeech STT 기동.");
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        console.warn("⚠️ WebSpeech API 미지원 브라우저입니다. 실시간 VAD 마이크 스트리밍으로 즉시 폴백 기동합니다.");
-        startMicCapture();
-      } else {
-        startOnboardingSpeechRecognition();
-      }
-    }
-  };
 }
 
 // --- 마이크 캡처 → PCM16 base64 → WebSocket 전송 ---
@@ -2382,7 +2345,7 @@ function runTypewriterLoop() {
   setTimeout(runTypewriterLoop, delay);
 }
 
-// 🎙️ 브라우저 WebSpeech API를 활용한 최초 온보딩용 고정밀 음성 검색 인식기
+// 🎙️ 브라우저 WebSpeech API를 활용한 최초 온보딩용 고정밀 음성 검색 인식기 (실시간 타이핑 전사 적용)
 function startOnboardingSpeechRecognition() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
@@ -2396,25 +2359,50 @@ function startOnboardingSpeechRecognition() {
   
   recognition = new SpeechRecognition();
   recognition.lang = "ko-KR";
-  recognition.interimResults = false;
+  recognition.interimResults = true; // 실시간 받아쓰기 활성화
+  recognition.continuous = false;    // 한 문장이 끝나면 감지 멈춤
   recognition.maxAlternatives = 1;
 
   recognition.onresult = (event) => {
-    const text = event.results[0][0].transcript;
-    console.log("🎙️ [WebSpeech STT 결과]", text);
-    
-    if (text && text.trim().length > 0 && !hasRenderedYoutubeWidget) {
-      // 💡 웰컴 오디오가 아직 재생 중인 동안에는 음성인식 결과를 철저히 무시합니다.
-      if (welcomeAudio && !welcomeAudio.paused) {
-        console.log("🤫 웰컴 메시지 재생 중이므로 음성인식 결과 무시:", text);
-        return;
+    let interimTranscript = "";
+    let finalTranscript = "";
+
+    for (let i = event.resultIndex; i < event.results.length; ++i) {
+      if (event.results[i].isFinal) {
+        finalTranscript += event.results[i][0].transcript;
+      } else {
+        interimTranscript += event.results[i][0].transcript;
       }
+    }
+
+    const currentText = finalTranscript || interimTranscript;
+    console.log("🎙️ [WebSpeech STT 실시간 전사]", { final: finalTranscript, interim: interimTranscript });
+
+    if (currentText && currentText.trim().length > 0 && !hasRenderedYoutubeWidget) {
       // 1. 유저 화면 전사용 싱글 말풍선 렌더링
       if (!currentUserBubble) {
         currentUserBubble = createChatBubble("user");
       }
-      currentUserBubble.querySelector(".bubble-content").innerText = text;
+      
+      const contentEl = currentUserBubble.querySelector(".bubble-content");
+      
+      if (finalTranscript) {
+        // 말이 완전히 확정되었을 때
+        contentEl.innerText = finalTranscript;
+        contentEl.style.opacity = "1.0"; // 확실하게 강조
+      } else {
+        // 사용자가 말하고 있는 도중 (실시간 타이핑 효과)
+        contentEl.innerText = interimTranscript;
+        contentEl.style.opacity = "0.6"; // 반투명 연출
+      }
+      
+      // 화면 자동 스크롤
+      const scrollArea = document.querySelector(".card-display-area");
+      if (scrollArea) scrollArea.scrollTo({ top: scrollArea.scrollHeight, behavior: 'smooth' });
+    }
 
+    // 최종 확정 텍스트가 나왔을 경우 그록에게 전송하여 도구 호출 트리거
+    if (finalTranscript && finalTranscript.trim().length > 0 && !hasRenderedYoutubeWidget) {
       // 2. Realtime WebSocket 채널로 그록에게 텍스트 명령 주입
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
@@ -2422,21 +2410,25 @@ function startOnboardingSpeechRecognition() {
           item: {
             type: "message",
             role: "user",
-            content: [{ type: "text", text: text }]
+            content: [{ type: "text", text: finalTranscript }]
           }
         }));
         ws.send(JSON.stringify({ type: "response.create" }));
       }
+      // 말풍선 바인딩 초기화
+      currentUserBubble = null;
     }
   };
 
   recognition.onerror = (err) => {
     console.error("SpeechRecognition error:", err);
+    // 에러 발생 시 말풍선 초기화 및 재기동 대비
+    currentUserBubble = null;
   };
 
   recognition.onend = () => {
     console.log("SpeechRecognition stopped.");
-    // 💡 아직 썸네일 카드가 노출되기 전이고, 세션이 살아있다면(isRecording === true) 자동으로 음성인식을 재시작해 기회를 줍니다.
+    // 💡 아직 썸네일 카드가 노출되기 전이고, 세션이 살아있다면 자동으로 음성인식을 재시작해 기회를 줍니다.
     if (isRecording && !hasRenderedYoutubeWidget && ws && ws.readyState === WebSocket.OPEN) {
       console.log("🔄 온보딩 검색 대기 유지: WebSpeech Recognition 재기동");
       try {
@@ -2448,7 +2440,7 @@ function startOnboardingSpeechRecognition() {
   };
 
   recognition.start();
-  console.log("🎙️ WebSpeech Recognition 기동 완료 (최초 온보딩 쿼리 대기)");
+  console.log("🎙️ WebSpeech Recognition 기동 완료 (실시간 타이핑 모드)");
 }
 
 // 🍞 화면 중앙 상단 검색 인텐트 피드백용 프리미엄 글래스모피즘 토스트
