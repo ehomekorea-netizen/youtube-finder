@@ -784,7 +784,7 @@ async function startGeminiLiveSession(apiKey) {
     // 1. Setup 메시지 전송 (BidiGenerateContentSetup)
     const setupMessage = {
       setup: {
-        model: "models/gemini-2.0-flash-exp",
+        model: "models/gemini-3.1-flash-live-preview",
         generationConfig: {
           responseModalities: ["AUDIO"],
           speechConfig: {
