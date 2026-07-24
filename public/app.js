@@ -806,8 +806,8 @@ async function startGeminiLiveSession(apiKey) {
             {
               text: `너는 사용자의 전문적인 유튜브 아카이빙 비서이자 트렌드 분석가야.
 사용자가 말을 걸면 정중하고 자연스러운 한국어 음성으로 친절하게 대답해줘.
-사용자가 유튜브 동영상 검색이나 추천을 요청하면 지체 없이 'youtube_search_videos' 툴을 호출해.
-툴 호출이 성공하면 검색 결과를 참고해서 핵심 내용을 부드러운 한국어 음성으로 브리핑해줘.`
+1. 사용자가 유튜브 동영상 검색이나 추천을 요청하면 지체 없이 'youtube_search_videos' 툴을 호출해.
+2. 위젯 카드가 화면에 뜬 후에도, 사용자가 "2번 영상 재생해줘", "1번 재생해줘", "다른 영상 찾아줘" 같은 연속 음성 질문이나 재요청을 하면 계속해서 'play_video'나 'youtube_search_videos' 툴을 호출하고 대화를 끊김 없이 이어가야 해.`
             }
           ]
         },
@@ -1115,8 +1115,16 @@ function enqueueAudio(base64Audio) {
     float32[i] = pcm16[i] / 32768.0;
   }
 
+  // 💡 지직거림/팝 노이즈 제거: 오디오 조각 연결 부위 미세 페이드 크로스페이드 (16 샘플)
+  const fadeLen = Math.min(16, Math.floor(float32.length / 4));
+  for (let i = 0; i < fadeLen; i++) {
+    const factor = i / fadeLen;
+    float32[i] *= factor;
+    float32[float32.length - 1 - i] *= factor;
+  }
+
   if (!playbackCtx) {
-    playbackCtx = new AudioContext({ sampleRate: 24000 });
+    playbackCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
     grokAnalyser = playbackCtx.createAnalyser();
     grokAnalyser.fftSize = 64;
   }
@@ -1145,6 +1153,11 @@ function drainPlaybackQueue() {
   
   activeSource = playbackCtx.createBufferSource();
   activeSource.buffer = buffer;
+  
+  // 💡 음성 대화 배속 설정: 1.1배속 적용
+  const PLAYBACK_SPEED = 1.1;
+  activeSource.playbackRate.value = PLAYBACK_SPEED;
+
   activeSource.connect(playbackCtx.destination);
   if (grokAnalyser) {
     activeSource.connect(grokAnalyser);
@@ -1156,7 +1169,7 @@ function drainPlaybackQueue() {
   }
   
   activeSource.start(nextPlaybackTime);
-  nextPlaybackTime += buffer.duration;
+  nextPlaybackTime += (buffer.duration / PLAYBACK_SPEED);
   
   activeSource.onended = () => {
     drainPlaybackQueue();
@@ -2115,7 +2128,7 @@ function startVisualizerLoop() {
         const val = (dataArray[i] / 128.0) - 1.0;
         sum += val * val;
       }
-      targetVolume = Math.min(Math.sqrt(sum / bufferLength) * 2.2, 1.0);
+      targetVolume = Math.min(Math.sqrt(sum / bufferLength) * 5.0, 1.0);
     } else if (isMockMode && typeof currentVolume !== "undefined") {
       // 시뮬레이터 모드 가상 볼륨 연동
       targetVolume = Math.min(currentVolume * 4.0, 1.0);
@@ -2124,25 +2137,25 @@ function startVisualizerLoop() {
       targetVolume = 0.05;
     }
 
-    // 2. 물리 유체 선형 보간 (Fluid Lerp): 반응 속도를 약간 높여 더 역동적이게 만듦
-    smoothVolume = smoothVolume * 0.90 + targetVolume * 0.10;
+    // 2. 물리 유체 선형 보간 (Fluid Lerp): 민감도 및 반응 속도를 대폭 높여 극도로 역동적으로 표현
+    smoothVolume = smoothVolume * 0.72 + targetVolume * 0.28;
     
-    // 목소리 크기에 따라 파동의 흐름 속도를 동적으로 가속 (말할 때 흐름이 빨라져 역동적임)
-    wavePhase += 0.018 + smoothVolume * 0.04;
+    // 목소리 크기에 따라 파동의 흐름 속도를 동적으로 가속 (말할 때 흐름이 매우 빨라져 역동적임)
+    wavePhase += 0.025 + smoothVolume * 0.08;
 
     // 3개 레이어의 파동 설정 (선 두께, 색상, 위상차, 진폭 배율, 주파수 배율)
     let waveConfigs = [];
-    const hue = (wavePhase * 35) % 360; // 💡 서서히 부드럽게 색상 순환하는 HSL 레이저쇼 베이스
+    const hue = (wavePhase * 45) % 360; // 💡 서서히 부드럽게 색상 순환하는 HSL 레이저쇼 베이스
 
     if (isRecording) {
       // 💡 활성화 (Connected) 상태: 글로우 효과와 함께 끊임없이 요동치며 변하는 영롱한 레이저쇼 컬러 레이어
-      visualizerCtx.shadowBlur = 18;
-      visualizerCtx.shadowColor = `hsla(${hue}, 100%, 60%, 0.7)`;
+      visualizerCtx.shadowBlur = 24;
+      visualizerCtx.shadowColor = `hsla(${hue}, 100%, 65%, 0.85)`;
 
       waveConfigs = [
-        { width: 2.8, color: `hsla(${hue}, 100%, 65%, 0.9)`, phaseShift: 0, amp: 1.35, freqMult: 0.12 },
-        { width: 1.8, color: `hsla(${(hue + 75) % 360}, 100%, 60%, 0.55)`, phaseShift: 2.3, amp: 0.9, freqMult: 0.15 },
-        { width: 1.0, color: `hsla(${(hue + 150) % 360}, 100%, 55%, 0.25)`, phaseShift: 4.6, amp: 0.5, freqMult: 0.08 }
+        { width: 3.5, color: `hsla(${hue}, 100%, 70%, 0.95)`, phaseShift: 0, amp: 2.1, freqMult: 0.15 },
+        { width: 2.2, color: `hsla(${(hue + 80) % 360}, 100%, 65%, 0.65)`, phaseShift: 2.3, amp: 1.5, freqMult: 0.18 },
+        { width: 1.2, color: `hsla(${(hue + 160) % 360}, 100%, 60%, 0.35)`, phaseShift: 4.6, amp: 0.9, freqMult: 0.10 }
       ];
     } else {
       // 💡 비활성화 (Disconnected) 상태: 은은하게 숨쉬는 붉은색 주파수
@@ -2171,11 +2184,11 @@ function startVisualizerLoop() {
         
         // 메인 파동에 고주파 배음(Harmonic Ripple)을 혼합하여 단순하지 않고 유기적으로 일렁이는 곡선 생성 (역동적 굴곡)
         const waveOffset = Math.sin(i * cfg.freqMult + wavePhase + cfg.phaseShift) + 
-                           0.26 * Math.sin(i * cfg.freqMult * 2.4 - wavePhase * 1.5 + cfg.phaseShift);
+                           0.35 * Math.sin(i * cfg.freqMult * 2.5 - wavePhase * 1.8 + cfg.phaseShift);
                            
-        // 세로 진폭 곱연산 범위를 늘려(h * 0.38) 목소리 진폭 변화를 한층 더 다이내믹하게 표출
+        // 세로 진폭 곱연산 범위를 극대화(h * 0.65)하여 목소리 진폭 변화를 한층 더 다이내믹하게 표출
         const y = (h / 2) + 
-          (waveOffset * (h * 0.38) * (0.05 + smoothVolume * 0.95) * envelope * cfg.amp);
+          (waveOffset * (h * 0.65) * (0.05 + smoothVolume * 1.8) * envelope * cfg.amp);
 
         if (i === 0) {
           visualizerCtx.moveTo(x, y);
