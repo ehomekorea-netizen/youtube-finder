@@ -1062,15 +1062,13 @@ async function startMicCapture() {
     }
     const base64 = uint8ToBase64(new Uint8Array(pcm16.buffer));
 
-    // Gemini Live 전용 realtimeInput 전송 규격 (rate=16000 명시)
+    // Gemini Live 전용 realtimeInput 전송 규격 (최신 audio 규격 적용)
     ws.send(JSON.stringify({
       realtimeInput: {
-        mediaChunks: [
-          {
-            mimeType: "audio/pcm;rate=16000",
-            data: base64
-          }
-        ]
+        audio: {
+          mimeType: "audio/pcm;rate=16000",
+          data: base64
+        }
       }
     }));
   };
