@@ -987,12 +987,15 @@ async function startGeminiLiveSession(apiKey) {
 
   ws.onerror = (err) => {
     console.error("❌ Gemini WebSocket 에러:", err);
-    alert("Gemini Live 연결 에러가 발생했습니다.");
+    showToast("❌ Gemini Live 연결 에러: " + (err.message || "연결 오류 발생"));
     stopSession();
   };
 
   ws.onclose = (e) => {
-    console.log("🔌 Gemini WebSocket 종료:", e.code, e.reason);
+    console.log("🔌 Gemini WebSocket 종료 코드:", e.code, "원인:", e.reason);
+    if (e.code !== 1000 && e.code !== 1005) {
+      showToast(`🔌 Gemini 연결 종료 (코드: ${e.code}${e.reason ? ', 원인: ' + e.reason : ''})`);
+    }
     if (isRecording) stopSession();
   };
 
@@ -1044,6 +1047,9 @@ async function startMicCapture() {
     if (welcomeAudio && !welcomeAudio.paused && !hasRenderedYoutubeWidget) {
       return;
     }
+
+    // 마이크 음성 전송 시 대기 타임아웃 타이머 리셋
+    resetIdleTimer();
     
     const float32 = e.inputBuffer.getChannelData(0);
     const ratio = nativeSR / TARGET_SAMPLE_RATE;
@@ -1056,12 +1062,12 @@ async function startMicCapture() {
     }
     const base64 = uint8ToBase64(new Uint8Array(pcm16.buffer));
 
-    // Gemini Live 전용 realtimeInput 전송 규격
+    // Gemini Live 전용 realtimeInput 전송 규격 (rate=16000 명시)
     ws.send(JSON.stringify({
       realtimeInput: {
         mediaChunks: [
           {
-            mimeType: "audio/pcm",
+            mimeType: "audio/pcm;rate=16000",
             data: base64
           }
         ]
