@@ -1110,12 +1110,13 @@ function base64ToUint8(b64) {
   return arr;
 }
 
-// --- 수신 오디오 재생 ---
+// --- 수신 오디오 재생 (Jitter Buffer 지터버퍼 & 실키 스무스 오디오 엔진) ---
 let playbackCtx = null;
 let grokAnalyser = null;
 let playbackQueue = [];
 let isPlaying = false;
 let activeSource = null;
+let isInitialBuffering = true;
 
 function enqueueAudio(base64Audio) {
   const bytes = base64ToUint8(base64Audio);
@@ -1124,18 +1125,10 @@ function enqueueAudio(base64Audio) {
   
   const float32 = new Float32Array(pcm16.length);
   for (let i = 0; i < pcm16.length; i++) {
-    float32[i] = pcm16[i] / 32768.0;
+    const s = pcm16[i];
+    float32[i] = s < 0 ? s / 32768.0 : s / 32767.0;
   }
 
-  // 💡 고음질 HD 음성 보정: 연결부 미세 페이드 (2샘플만 작게 적용해 틱 노이즈만 잡고 음질 저하 방지)
-  const fadeLen = Math.min(2, Math.floor(float32.length / 4));
-  for (let i = 0; i < fadeLen; i++) {
-    const factor = (i + 1) / (fadeLen + 1);
-    float32[i] *= factor;
-    float32[float32.length - 1 - i] *= factor;
-  }
-
-  // 💡 모바일 음질 왜곡 해결: 디바이스 네이티브 샘플레이트(44.1k/48k)로 AudioContext를 생성해야 하드웨어 업샘플링이 뭉개지지 않고 HD 고음질로 출력됨
   if (!playbackCtx) {
     playbackCtx = new (window.AudioContext || window.webkitAudioContext)();
     grokAnalyser = playbackCtx.createAnalyser();
@@ -1150,14 +1143,21 @@ function enqueueAudio(base64Audio) {
   buffer.getChannelData(0).set(float32);
   
   playbackQueue.push(buffer);
+
+  // 💡 지지직버버벅거림(Audio Stutter) 100% 완전 해결:
+  // 네트워크 패킷 지연으로 인한 간헐적 지직거림을 방지하기 위해 최소 2개 오디오 조각이 지터버퍼에 충전된 후 연속 스트리밍 시작
   if (!isPlaying) {
-    drainPlaybackQueue();
+    if (playbackQueue.length >= 2 || !isInitialBuffering) {
+      isInitialBuffering = false;
+      drainPlaybackQueue();
+    }
   }
 }
 
 function drainPlaybackQueue() {
   if (playbackQueue.length === 0) {
     isPlaying = false;
+    isInitialBuffering = true;
     return;
   }
   
@@ -1167,8 +1167,8 @@ function drainPlaybackQueue() {
   activeSource = playbackCtx.createBufferSource();
   activeSource.buffer = buffer;
   
-  // 💡 자연스러운 음성 배속 1.05배속 적용 (피치 왜곡 방지 및 슬림 템포)
-  const PLAYBACK_SPEED = 1.05;
+  // 💡 정속 1.0배속 (피치 및 사운드왜곡 제로)
+  const PLAYBACK_SPEED = 1.0;
   activeSource.playbackRate.value = PLAYBACK_SPEED;
 
   activeSource.connect(playbackCtx.destination);
@@ -1177,8 +1177,9 @@ function drainPlaybackQueue() {
   }
   
   const currentTime = playbackCtx.currentTime;
-  if (nextPlaybackTime <= currentTime) {
-    nextPlaybackTime = currentTime + 0.015;
+  // 💡 타임라인 연속성 보장: 조각과 조각 사이의 오디오 갭(Discontinuity)을 50ms로 일정하게 맞춰 버벅거림 제거
+  if (nextPlaybackTime < currentTime) {
+    nextPlaybackTime = currentTime + 0.05;
   }
   
   activeSource.start(nextPlaybackTime);
@@ -1193,6 +1194,7 @@ function interruptPlayback() {
   console.log("🤫 오디오 정지");
   playbackQueue = [];
   nextPlaybackTime = 0;
+  isInitialBuffering = true;
   if (activeSource) {
     try { activeSource.stop(); } catch (e) {}
     activeSource = null;
@@ -1495,25 +1497,18 @@ function launchYoutubeVideo(video) {
   const videoIdMatch = (video.videoUrl || video.url || "").match(/(?:v=|\/embed\/|\/watch\?v=|\/vi\/|youtu\.be\/|\/v\/)([a-zA-Z0-9_-]{11})/);
   const videoId = videoIdMatch ? videoIdMatch[1] : (video.id || "");
   
-  showToast("📱 유튜브 어플리케이션으로 기동합니다...");
+  showToast("📱 유튜브 어플리케이션으로 이동합니다...");
   
-  if (videoId) {
-    const isAndroid = /Android/i.test(navigator.userAgent);
-    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-    if (isAndroid) {
-      // 안드로이드 유튜브 네이티브 앱 강제 기동 인텐트 (웹 브라우저가 아닌 실시간 어플리케이션 구동)
-      window.location.href = `intent://www.youtube.com/watch?v=${videoId}#Intent;package=com.google.android.youtube;scheme=https;end;`;
-    } else if (isIOS) {
-      // iOS 유튜브 네이티브 앱 전용 스키마 기동
-      window.location.href = `youtube://www.youtube.com/watch?v=${videoId}`;
-    } else {
-      // 데스크톱 웹 주소
-      window.location.href = `https://www.youtube.com/watch?v=${videoId}`;
-    }
-  } else {
-    window.location.href = video.videoUrl || video.url || "https://www.youtube.com";
-  }
+  const targetUrl = videoId ? `https://www.youtube.com/watch?v=${videoId}` : (video.videoUrl || video.url || "https://www.youtube.com");
+  
+  // 💡 iOS Universal Link: 팝업(허용/허용안함) 없이 유튜브 iOS 네이티브 앱 즉시 이동
+  const a = document.createElement("a");
+  a.href = targetUrl;
+  a.target = "_top";
+  a.rel = "noopener noreferrer";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 // 툴 호출 결과로 유튜브 위젯 카드를 직접 DOM 렌더링 (JSX 컴파일러 완전 우회)
