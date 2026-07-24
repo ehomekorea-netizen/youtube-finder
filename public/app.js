@@ -1066,9 +1066,14 @@ async function startMicCapture() {
       sumSq += s * s;
     }
 
-    // 💡 사용자 끼어들기(Barge-in): 사용자가 말을 하기 시작하면 Gemini 음성 출력을 멈추고 새로운 사용자 음성에 즉시 집중
+    // 💡 사용자 끼어들기(Barge-in):
+    // - 임계값 0.50: 스피커 블리드(Gemini 목소리가 마이크에 잡히는 것)는 보통 RMS 0.1~0.3 수준
+    //   실제 사람 목소리 barge-in은 0.5 이상이므로 구분 가능
+    // - 쿨다운 1500ms: 재생 시작 직후에는 barge-in 완전 무시 (스피커 echo 방지)
     const rms = Math.sqrt(sumSq / downLen);
-    if (isPlaying && rms > 0.12) {
+    const bargeInCooldown = 1500; // ms
+    const cooldownElapsed = Date.now() - playbackStartedAt;
+    if (isPlaying && rms > 0.50 && cooldownElapsed > bargeInCooldown) {
       interruptPlayback();
     }
 
@@ -1086,8 +1091,13 @@ async function startMicCapture() {
   };
 
   source.connect(micProcessor);
-  micProcessor.connect(micContext.destination);
-  console.log(`🎤 Gemini Live 마이크 캡처 시작 (${nativeSR}Hz → ${TARGET_SAMPLE_RATE}Hz 다운샘플링 → WebSocket)`);
+  // ✅ ScriptProcessor는 destination에 연결해야 onaudioprocess가 발화하지만
+  //    마이크 입력이 스피커로 나가면 안 되므로 gain=0 인 무음 노드를 중간에 삽입
+  const silentGain = micContext.createGain();
+  silentGain.gain.value = 0; // 마이크 오디오를 스피커로 출력하지 않음
+  micProcessor.connect(silentGain);
+  silentGain.connect(micContext.destination);
+  console.log(`🎤 Gemini Live 마이크 캡처 시작 (${nativeSR}Hz → ${TARGET_SAMPLE_RATE}Hz 다운샘플링 → WebSocket, 스피커 에코 차단)`);
 }
 
 function stopMicCapture() {
@@ -1121,6 +1131,7 @@ let grokAnalyser = null;
 let isPlaying = false;
 let activeSource = null;
 let scheduledEndTime = 0; // 다음 버퍼가 시작될 절대 시간
+let playbackStartedAt = 0; // barge-in 쿨다운용: 재생 시작 시각
 
 function ensurePlaybackCtx() {
   if (!playbackCtx) {
@@ -1160,6 +1171,9 @@ function enqueueAudio(base64Audio) {
   source.start(startAt);
 
   scheduledEndTime = startAt + buffer.duration;
+  if (!isPlaying) {
+    playbackStartedAt = Date.now(); // 재생 시작 시각 기록 (barge-in 쿨다운)
+  }
   isPlaying = true;
   activeSource = source;
 }
