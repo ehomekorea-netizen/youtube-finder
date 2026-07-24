@@ -754,6 +754,12 @@ async function startSession() {
 async function startGeminiLiveSession(apiKey) {
   let keyToUse = apiKey;
 
+  // 💡 구버전 WebSpeech STT 충돌 방지: Gemini Live는 마이크 오디오(PCM16) 직접 전송 방식이므로 WebSpeech 비활성화
+  if (recognition) {
+    try { recognition.abort(); } catch (e) {}
+    recognition = null;
+  }
+
   // 💡 로컬 스토리지에 사용자가 입력한 API 키가 있다면 우선 적용
   const userSavedKey = localStorage.getItem("GEMINI_API_KEY");
   if (userSavedKey && userSavedKey.trim()) {
@@ -1018,6 +1024,7 @@ const TARGET_SAMPLE_RATE = 16000;
 async function startMicCapture() {
   try {
     micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    setupAudioContext(micStream);
   } catch (err) {
     alert("마이크 권한이 필요합니다: " + err.message);
     stopSession();
