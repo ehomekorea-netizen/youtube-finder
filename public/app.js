@@ -806,8 +806,11 @@ async function startGeminiLiveSession(apiKey) {
             {
               text: `너는 사용자의 전문적인 유튜브 아카이빙 비서이자 트렌드 분석가야.
 사용자가 말을 걸면 정중하고 자연스러운 한국어 음성으로 친절하게 대답해줘.
+
 1. 사용자가 유튜브 동영상 검색이나 추천을 요청하면 지체 없이 'youtube_search_videos' 툴을 호출해.
-2. 위젯 카드가 화면에 뜬 후에도, 사용자가 "2번 영상 재생해줘", "1번 재생해줘", "다른 영상 찾아줘" 같은 연속 음성 질문이나 재요청을 하면 계속해서 'play_video'나 'youtube_search_videos' 툴을 호출하고 대화를 끊김 없이 이어가야 해.`
+2. 유튜브 검색 결과(youtube_search_videos)가 화면에 뜬 직후에는, 지체 없이 3개 영상에 대해 짧고 간결하게 핵심 내용을 한국어 음성으로 소개해줘야 해. (예시: "첫 번째 영상은 [제목/내용 요약]이고, 두 번째 영상은 [요약], 세 번째 영상은 [요약]입니다. 몇 번 영상을 재생할까요?")
+3. 위젯 카드가 화면에 노출된 후 사용자가 "2번 영상 재생해줘", "1번 재생해줘", "3번 보여줘" 라고 요구하면 지체 없이 'play_video' 툴을 호출해.
+4. 사용자가 다른 주제를 말하면 즉시 'youtube_search_videos' 툴을 다시 호출해.`
             }
           ]
         },
@@ -1491,26 +1494,11 @@ function launchYoutubeVideo(video) {
   const videoIdMatch = (video.videoUrl || video.url || "").match(/(?:v=|\/embed\/|\/watch\?v=|\/vi\/|youtu\.be\/|\/v\/)([a-zA-Z0-9_-]{11})/);
   const videoId = videoIdMatch ? videoIdMatch[1] : (video.id || "");
   
-  if (videoId) {
-    const deepLink = `youtube://www.youtube.com/watch?v=${videoId}`;
-    const webFallbackUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    
-    console.log(`📡 [Deep Link] 유튜브 네이티브 앱 연동 시도: ${deepLink}`);
-    
-    // 모바일 PWA 환경에서 팝업 차단기를 완전히 우회하고 앱을 직접 기동하기 위해 location.href를 사용합니다.
-    window.location.href = deepLink;
-    
-    // 유튜브 앱이 깔려있지 않은 브라우저 환경 대응을 위한 1.5초 타이머 웹 폴백
-    setTimeout(() => {
-      if (document.visibilityState === "visible") {
-        console.log("⚠️ 유튜브 앱 미동작 감지. 웹 브라우저 주소로 폴백 이동합니다.");
-        window.location.href = webFallbackUrl;
-      }
-    }, 1500);
-  } else {
-    const fallbackUrl = video.videoUrl || video.url || "https://www.youtube.com";
-    window.location.href = fallbackUrl;
-  }
+  const targetUrl = videoId ? `https://www.youtube.com/watch?v=${videoId}` : (video.videoUrl || video.url || "https://www.youtube.com");
+  console.log(`🎬 [즉시 재생] 팝업/허용 창 없이 바로 유튜브 영상 이동: ${targetUrl}`);
+  
+  showToast("🎬 유튜브 영상을 즉시 재생합니다...");
+  window.location.href = targetUrl;
 }
 
 // 툴 호출 결과로 유튜브 위젯 카드를 직접 DOM 렌더링 (JSX 컴파일러 완전 우회)
