@@ -752,18 +752,39 @@ async function startSession() {
 // 🌟 1. Gemini Multimodal Live API (WebSocket) 엔진
 // ----------------------------------------------------
 async function startGeminiLiveSession(apiKey) {
-  console.log("🔌 [Gemini Live] Gemini 3 Flash Live WebSocket 세션 연결 기동...");
+  let keyToUse = apiKey;
 
-  const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+  // 💡 로컬 스토리지에 사용자가 입력한 API 키가 있다면 우선 적용
+  const userSavedKey = localStorage.getItem("GEMINI_API_KEY");
+  if (userSavedKey && userSavedKey.trim()) {
+    keyToUse = userSavedKey.trim();
+  }
+
+  if (!keyToUse || keyToUse.startsWith("mock-key")) {
+    const inputKey = prompt("🔑 Google AI Studio 무료 Gemini API Key를 입력해 주세요:\n(무료 키를 입력하시면 브라우저에 저장되어 즉시 음성 대화가 시작됩니다)");
+    if (inputKey && inputKey.trim()) {
+      keyToUse = inputKey.trim();
+      localStorage.setItem("GEMINI_API_KEY", keyToUse);
+    } else {
+      alert("❌ API Key 없이는 Gemini Live 음성 대화를 진행할 수 없습니다.");
+      resetUI();
+      return;
+    }
+  }
+
+  console.log("🔌 [Gemini Live] Gemini Flash Live WebSocket 세션 연결 기동...");
+
+  // 구글 공식 Multimodal Live API (BidiGenerateContent) v1alpha WebSocket
+  const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${keyToUse}`;
   ws = new WebSocket(wsUrl);
 
   ws.onopen = async () => {
-    console.log("🔌 Gemini 3 Flash Live WebSocket 연결 성공!");
+    console.log("🔌 Gemini Flash Live WebSocket 연결 성공!");
     
     // 1. Setup 메시지 전송 (BidiGenerateContentSetup)
     const setupMessage = {
       setup: {
-        model: "models/gemini-3.1-flash-live-preview",
+        model: "models/gemini-2.0-flash-exp",
         generationConfig: {
           responseModalities: ["AUDIO"],
           speechConfig: {
