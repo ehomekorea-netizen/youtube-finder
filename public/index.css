@@ -307,13 +307,13 @@ body {
 
 .orb-container {
   width: 100%;
-  height: 50px;
+  height: 90px;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 0px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 #audio-visualizer {

@@ -1055,11 +1055,20 @@ async function startMicCapture() {
     const ratio = nativeSR / TARGET_SAMPLE_RATE;
     const downLen = Math.floor(float32.length / ratio);
     const pcm16 = new Int16Array(downLen);
+    let sumSq = 0;
     for (let i = 0; i < downLen; i++) {
       const srcIdx = Math.floor(i * ratio);
       const s = Math.max(-1, Math.min(1, float32[srcIdx]));
       pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      sumSq += s * s;
     }
+
+    // 💡 사용자 끼어들기(Barge-in): 사용자가 말을 하기 시작하면 Gemini 음성 출력을 멈추고 새로운 사용자 음성에 즉시 집중
+    const rms = Math.sqrt(sumSq / downLen);
+    if (isPlaying && rms > 0.12) {
+      interruptPlayback();
+    }
+
     const base64 = uint8ToBase64(new Uint8Array(pcm16.buffer));
 
     // Gemini Live 전용 realtimeInput 전송 규격 (최신 audio 규격 적용)
