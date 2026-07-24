@@ -1110,97 +1110,72 @@ function base64ToUint8(b64) {
   return arr;
 }
 
-// --- 수신 오디오 재생 (Jitter Buffer 지터버퍼 & 실키 스무스 오디오 엔진) ---
+// ============================================================
+// 🎙️ 수신 오디오 재생 엔진 (Gapless Pre-Scheduled Stream)
+// 지직거림 근본 해결: onended 콜백 체이닝 방식 완전 폐기
+// 각 오디오 조각이 도착할 때마다 절대 AudioContext 타임라인에
+// 미리 스케줄하여 조각 사이 갭(클릭음/지직음)을 원천 차단
+// ============================================================
 let playbackCtx = null;
 let grokAnalyser = null;
-let playbackQueue = [];
 let isPlaying = false;
 let activeSource = null;
-let isInitialBuffering = true;
+let scheduledEndTime = 0; // 다음 버퍼가 시작될 절대 시간
 
-function enqueueAudio(base64Audio) {
-  const bytes = base64ToUint8(base64Audio);
-  const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-  const pcm16 = new Int16Array(arrayBuffer);
-  
-  const float32 = new Float32Array(pcm16.length);
-  for (let i = 0; i < pcm16.length; i++) {
-    const s = pcm16[i];
-    float32[i] = s < 0 ? s / 32768.0 : s / 32767.0;
-  }
-
+function ensurePlaybackCtx() {
   if (!playbackCtx) {
     playbackCtx = new (window.AudioContext || window.webkitAudioContext)();
     grokAnalyser = playbackCtx.createAnalyser();
     grokAnalyser.fftSize = 64;
   }
-
   if (playbackCtx.state === "suspended") {
     playbackCtx.resume();
   }
-
-  const buffer = playbackCtx.createBuffer(1, float32.length, 24000);
-  buffer.getChannelData(0).set(float32);
-  
-  playbackQueue.push(buffer);
-
-  // 💡 지지직버버벅거림(Audio Stutter) 100% 완전 해결:
-  // 네트워크 패킷 지연으로 인한 간헐적 지직거림을 방지하기 위해 최소 2개 오디오 조각이 지터버퍼에 충전된 후 연속 스트리밍 시작
-  if (!isPlaying) {
-    if (playbackQueue.length >= 2 || !isInitialBuffering) {
-      isInitialBuffering = false;
-      drainPlaybackQueue();
-    }
-  }
 }
 
-function drainPlaybackQueue() {
-  if (playbackQueue.length === 0) {
-    isPlaying = false;
-    isInitialBuffering = true;
-    return;
-  }
-  
-  isPlaying = true;
-  const buffer = playbackQueue.shift();
-  
-  activeSource = playbackCtx.createBufferSource();
-  activeSource.buffer = buffer;
-  
-  // 💡 정속 1.0배속 (피치 및 사운드왜곡 제로)
-  const PLAYBACK_SPEED = 1.0;
-  activeSource.playbackRate.value = PLAYBACK_SPEED;
+function enqueueAudio(base64Audio) {
+  ensurePlaybackCtx();
 
-  activeSource.connect(playbackCtx.destination);
-  if (grokAnalyser) {
-    activeSource.connect(grokAnalyser);
+  const bytes = base64ToUint8(base64Audio);
+  const pcm16 = new Int16Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 2);
+  
+  // 24kHz PCM16 → Float32 변환 (정밀 클리핑)
+  const float32 = new Float32Array(pcm16.length);
+  for (let i = 0; i < pcm16.length; i++) {
+    float32[i] = Math.max(-1.0, Math.min(1.0, pcm16[i] / 32768.0));
   }
-  
-  const currentTime = playbackCtx.currentTime;
-  // 💡 타임라인 연속성 보장: 조각과 조각 사이의 오디오 갭(Discontinuity)을 50ms로 일정하게 맞춰 버벅거림 제거
-  if (nextPlaybackTime < currentTime) {
-    nextPlaybackTime = currentTime + 0.05;
-  }
-  
-  activeSource.start(nextPlaybackTime);
-  nextPlaybackTime += (buffer.duration / PLAYBACK_SPEED);
-  
-  activeSource.onended = () => {
-    drainPlaybackQueue();
-  };
+
+  // 24kHz AudioBuffer 생성 (브라우저가 네이티브 SR로 고품질 리샘플)
+  const buffer = playbackCtx.createBuffer(1, float32.length, 24000);
+  buffer.getChannelData(0).set(float32);
+
+  // ✅ 핵심: 도착 즉시 절대 타임라인에 미리 스케줄 (갭 원천 제거)
+  const now = playbackCtx.currentTime;
+  const startAt = Math.max(now + 0.01, scheduledEndTime);
+
+  const source = playbackCtx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(playbackCtx.destination);
+  if (grokAnalyser) source.connect(grokAnalyser);
+  source.start(startAt);
+
+  scheduledEndTime = startAt + buffer.duration;
+  isPlaying = true;
+  activeSource = source;
 }
 
 function interruptPlayback() {
-  console.log("🤫 오디오 정지");
-  playbackQueue = [];
-  nextPlaybackTime = 0;
-  isInitialBuffering = true;
+  scheduledEndTime = 0;
+  isPlaying = false;
   if (activeSource) {
     try { activeSource.stop(); } catch (e) {}
     activeSource = null;
   }
-  isPlaying = false;
 }
+
+// 더 이상 사용하지 않는 함수 (호환성 유지용)
+function drainPlaybackQueue() {}
+
 
 // --- WebSocket 이벤트 핸들러 ---
 function handleRealtimeEvent(event) {
