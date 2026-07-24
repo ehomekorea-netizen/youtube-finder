@@ -726,16 +726,18 @@ async function startSession() {
     const data = await response.json();
 
     if (data.error) {
-      alert("세션 토큰 생성 실패: " + data.error);
+      alert("세션 생성 실패: " + data.error);
       resetUI();
       return;
     }
 
     isMockMode = data.isMock;
-    if (modeDisplay) modeDisplay.innerText = isMockMode ? "Mock Simulator" : "Grok Live Session";
+    if (modeDisplay) modeDisplay.innerText = isMockMode ? "Mock Simulator" : "Gemini Live Session";
 
     if (isMockMode) {
       startMockSession();
+    } else if (data.provider === "gemini" || data.geminiApiKey) {
+      await startGeminiLiveSession(data.geminiApiKey);
     } else {
       await startRealtimeSession(data.value);
     }
@@ -746,47 +748,224 @@ async function startSession() {
   }
 }
 
-async function startRealtimeSession(clientToken) {
-  // config.json 로드하여 reasoning_effort 파라미터 동적 획득
-  let reasoningEffort = "high";
-  try {
-    const configRes = await fetch("/config.json");
-    if (configRes.ok) {
-      const loadedConfig = await configRes.json();
-      if (loadedConfig.reasoning_effort) {
-        reasoningEffort = loadedConfig.reasoning_effort;
-      }
-    }
-  } catch (err) {
-    console.warn("⚠️ config.json 로드 실패, 기본 reasoning_effort: high를 사용합니다.");
-  }
-  
-  console.log(`🔌 [Reasoning Connection] 선택된 추론 레벨 (${reasoningEffort})로 Grok WebSocket 주소를 생성합니다.`);
+// ----------------------------------------------------
+// 🌟 1. Gemini Multimodal Live API (WebSocket) 엔진
+// ----------------------------------------------------
+async function startGeminiLiveSession(apiKey) {
+  console.log("🔌 [Gemini Live] Gemini 3 Flash Live WebSocket 세션 연결 기동...");
 
-  // xAI 공식 지원: WebSocket + Ephemeral Token (서브프로토콜 방식)
-  const wsUrl = `wss://api.x.ai/v1/realtime?model=grok-voice-latest&reasoning.effort=${reasoningEffort}`;
-  ws = new WebSocket(wsUrl, [`xai-client-secret.${clientToken}`]);
+  const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+  ws = new WebSocket(wsUrl);
 
   ws.onopen = async () => {
-    console.log("🔌 xAI Grok Realtime WebSocket 연결 성공!");
-    await sendSessionUpdate();
+    console.log("🔌 Gemini 3 Flash Live WebSocket 연결 성공!");
     
-    // 웰컴 음성/메시지 없이 즉시 음성인식(STT) 기동하여 쾌적한 사용성 보장
-    startOnboardingSpeechRecognition();
+    // 1. Setup 메시지 전송 (BidiGenerateContentSetup)
+    const setupMessage = {
+      setup: {
+        model: "models/gemini-3.1-flash-live-preview",
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: "Puck"
+              }
+            }
+          }
+        },
+        systemInstruction: {
+          parts: [
+            {
+              text: `너는 사용자의 전문적인 유튜브 아카이빙 비서이자 트렌드 분석가야.
+사용자가 말을 걸면 정중하고 자연스러운 한국어 음성으로 친절하게 대답해줘.
+사용자가 유튜브 동영상 검색이나 추천을 요청하면 지체 없이 'youtube_search_videos' 툴을 호출해.
+툴 호출이 성공하면 검색 결과를 참고해서 핵심 내용을 부드러운 한국어 음성으로 브리핑해줘.`
+            }
+          ]
+        },
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: "youtube_search_videos",
+                description: "사용자가 요청한 주제의 유튜브 동영상을 검색하여 3개의 비디오 카드를 화면에 표시합니다.",
+                parameters: {
+                  type: "OBJECT",
+                  properties: {
+                    query: {
+                      type: "STRING",
+                      description: "검색할 유튜브 키워드 (예: AI 에이전트, 백종원 레시피)"
+                    }
+                  },
+                  required: ["query"]
+                }
+              },
+              {
+                name: "telegram_send",
+                description: "유튜브 동영상 정보를 텔레그램으로 전송합니다.",
+                parameters: {
+                  type: "OBJECT",
+                  properties: {
+                    title: { type: "STRING", description: "동영상 제목" },
+                    videoUrl: { type: "STRING", description: "동영상 URL" }
+                  },
+                  required: ["title", "videoUrl"]
+                }
+              },
+              {
+                name: "play_video",
+                description: "화면에 노출된 3개 비디오 중 지정한 인덱스 번호(1, 2, 3)의 영상을 브라우저에서 재생합니다.",
+                parameters: {
+                  type: "OBJECT",
+                  properties: {
+                    index: { type: "INTEGER", description: "재생할 영상 인덱스 번호 (1, 2, 3)" }
+                  },
+                  required: ["index"]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    };
+    ws.send(JSON.stringify(setupMessage));
+    console.log("📤 [Gemini Live] setup 메시지 전송 완료");
+
+    // 2. 마이크 음성 스트리밍 시작 (16kHz PCM16)
+    await startMicCapture();
   };
 
-  ws.onmessage = (e) => {
-    handleRealtimeEvent(JSON.parse(e.data));
+  ws.onmessage = async (e) => {
+    try {
+      let data;
+      if (e.data instanceof Blob) {
+        const text = await e.data.text();
+        data = JSON.parse(text);
+      } else {
+        data = JSON.parse(e.data);
+      }
+
+      resetIdleTimer();
+
+      // A. Gemini 오디오 출력 처리
+      if (data.serverContent?.modelTurn?.parts) {
+        for (const part of data.serverContent.modelTurn.parts) {
+          if (part.inlineData && part.inlineData.data) {
+            isResponseActive = true;
+            enqueueAudio(part.inlineData.data);
+            if (statusIndicator) statusIndicator.className = "status-indicator active";
+          }
+        }
+      }
+
+      if (data.serverContent?.turnComplete) {
+        isResponseActive = false;
+        if (statusIndicator) statusIndicator.className = "status-indicator connected";
+      }
+
+      // B. Gemini Realtime Tool Use (Function Calling) 처리
+      if (data.toolCall?.functionCalls) {
+        for (const call of data.toolCall.functionCalls) {
+          const { name, args, id } = call;
+          console.log(`🎬 [Gemini Tool Call]: ${name}`, args, id);
+
+          if (name === "youtube_search_videos") {
+            showToast(`"${args.query}" 실시간 검색 중...`);
+            try {
+              const res = await fetch("/api/mcp-gateway", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: "youtube_search_videos", arguments: args })
+              });
+              const result = await res.json();
+              console.log("📡 [Gateway 응답]:", result);
+
+              if (result.success && result.videos && result.videos.length > 0) {
+                renderYoutubeWidget(args.query, result.videos);
+              } else {
+                renderSearchErrorWidget(args.query, result.error || "검색 결과를 찾지 못했습니다.");
+              }
+
+              // 🚀 즉시 toolResponse 반환 (Gemini Live 타임아웃 차단)
+              const toolResp = {
+                toolResponse: {
+                  functionResponses: [
+                    {
+                      response: {
+                        output: {
+                          success: result.success,
+                          videos: (result.videos || []).map((v, i) => ({
+                            index: i + 1,
+                            title: v.title,
+                            channel: v.channelTitle,
+                            duration: v.duration,
+                            views: v.viewCount
+                          }))
+                        }
+                      },
+                      id: id
+                    }
+                  ]
+                }
+              };
+              ws.send(JSON.stringify(toolResp));
+              console.log("📤 [Gemini Live] toolResponse 반환 완료");
+            } catch (err) {
+              console.error("❌ 유튜브 검색 툴 실행 에러:", err);
+            }
+          } else if (name === "play_video") {
+            const idx = parseInt(args.index, 10) - 1;
+            if (window.currentContextVideos && window.currentContextVideos[idx]) {
+              const video = window.currentContextVideos[idx];
+              console.log(`🎬 [Play Video] ${idx + 1}번째 영상 재생 시도:`, video.title);
+              launchYoutubeVideo(video);
+              stopSession();
+            }
+            ws.send(JSON.stringify({
+              toolResponse: {
+                functionResponses: [
+                  {
+                    response: { output: { success: true, message: `Playing video ${args.index}` } },
+                    id: id
+                  }
+                ]
+              }
+            }));
+          } else if (name === "telegram_send") {
+            const res = await fetch("/api/mcp-gateway", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: "telegram_send", arguments: args })
+            });
+            const resData = await res.json();
+            if (resData.success) showToast(`"${args.title}" 텔레그램 전송 완료!`);
+            ws.send(JSON.stringify({
+              toolResponse: {
+                functionResponses: [
+                  {
+                    response: { output: { success: resData.success } },
+                    id: id
+                  }
+                ]
+              }
+            }));
+          }
+        }
+      }
+    } catch (err) {
+      console.error("❌ Gemini WebSocket 이벤트 처리 에러:", err);
+    }
   };
 
   ws.onerror = (err) => {
-    console.error("❌ WebSocket 에러:", err);
-    alert("WebSocket 연결 에러가 발생했습니다.");
+    console.error("❌ Gemini WebSocket 에러:", err);
+    alert("Gemini Live 연결 에러가 발생했습니다.");
     stopSession();
   };
 
   ws.onclose = (e) => {
-    console.log("🔌 WebSocket 종료:", e.code, e.reason);
+    console.log("🔌 Gemini WebSocket 종료:", e.code, e.reason);
     if (isRecording) stopSession();
   };
 
@@ -794,128 +973,26 @@ async function startRealtimeSession(clientToken) {
   updateUIForConnectedState();
 }
 
-// --- WebSocket 세션 설정 전송 ---
-async function sendSessionUpdate() {
-  let instructionsText = "";
-  let config = {
-    voice: "lumen",
-    welcome_message: "반갑습니다. 지금 뭐가 궁금하세요? 바로 파고들겠습니다.",
-    turn_detection: {
-      type: "server_vad",
-      threshold: 0.5,
-      prefix_padding_ms: 333,
-      silence_duration_ms: 400
-    }
+async function startRealtimeSession(clientToken) {
+  // Grok 폴백
+  const wsUrl = `wss://api.x.ai/v1/realtime?model=grok-voice-latest`;
+  ws = new WebSocket(wsUrl, [`xai-client-secret.${clientToken}`]);
+  ws.onopen = async () => {
+    console.log("🔌 xAI Grok Realtime WebSocket 연결 성공!");
+    await startMicCapture();
   };
-
-  // 1. instructions.txt 로드
-  try {
-    const res = await fetch("/instructions.txt");
-    if (res.ok) {
-      instructionsText = await res.text();
-      console.log("📝 instructions.txt 파일 로드 성공!");
-    } else {
-      throw new Error("파일이 존재하지 않음");
-    }
-  } catch (err) {
-    console.warn("⚠️ instructions.txt 로드 실패, 기본 지침을 사용합니다.", err);
-    instructionsText = `너는 사용자의 전문적인 아카이빙 비서이자 트렌드 분석가야.
-사용자의 관심사나 질문을 지적이고 날카롭게 파고들어 질문(Grill-me)하고, 최신 영상 큐레이션과 더불어 풍부한 트렌드/상식 동향을 깔끔하게 분석하여 브리핑하는 것이 임무다.`;
-  }
-
-  // 2. config.json 로드
-  try {
-    const configRes = await fetch("/config.json");
-    if (configRes.ok) {
-      const loadedConfig = await configRes.json();
-      config = { ...config, ...loadedConfig };
-      console.log("📝 config.json 파일 로드 성공!", config);
-    }
-  } catch (err) {
-    console.warn("⚠️ config.json 로드 실패, 기본 설정을 사용합니다.", err);
-  }
-
-  // 전역 출력 샘플레이트 업데이트
-  if (config.audio?.output?.format?.rate) {
-    OUTPUT_SAMPLE_RATE = config.audio.output.format.rate;
-    console.log(`🔊 출력 오디오 샘플레이트 동적 업데이트: ${OUTPUT_SAMPLE_RATE}Hz`);
-  }
-
-  const sessionUpdate = {
-    type: "session.update",
-    session: {
-      voice: config.voice || "lumen",
-      instructions: instructionsText,
-      turn_detection: {
-        type: "server_vad",
-        threshold: config.turn_detection?.threshold || 0.5,
-        prefix_padding_ms: config.turn_detection?.prefix_padding_ms || 333,
-        silence_duration_ms: config.turn_detection?.silence_duration_ms || 400
-      },
-      audio: {
-        input: {
-          format: { type: config.audio?.input?.format?.type || "audio/pcm", rate: config.audio?.input?.format?.rate || 24000 },
-          transcription: { language_hint: config.audio?.input?.transcription?.language_hint || "ko" }
-        },
-        output: {
-          format: { type: config.audio?.output?.format?.type || "audio/pcm", rate: config.audio?.output?.format?.rate || 24000 },
-          speed: config.audio?.output?.speed || 1.0
-        }
-      },
-      tools: [
-        {
-          type: "function",
-          name: "youtube_search_videos",
-          description: "사용자가 요청한 주제의 유튜브 동영상을 검색합니다. 결과는 자동으로 위젯 카드로 화면에 표시됩니다.",
-          parameters: {
-            type: "object",
-            properties: {
-              query: {
-                type: "string",
-                description: "검색할 유튜브 키워드 (예: AI 에이전트, 백종원 요리, 코딩 로파이 음악)"
-              }
-            },
-            required: ["query"]
-          }
-        },
-        {
-          type: "function",
-          name: "telegram_send",
-          description: "유튜브 동영상 정보를 사용자의 텔레그램 아카이빙 봇방으로 전송합니다.",
-          parameters: {
-            type: "object",
-            properties: {
-              title: { type: "string", description: "동영상 제목" },
-              videoUrl: { type: "string", description: "동영상 URL" }
-            },
-            required: ["title", "videoUrl"]
-          }
-        },
-        {
-          type: "function",
-          name: "play_video",
-          description: "화면에 노출된 3개의 비디오 중 사용자가 요청한 특정 번호(1, 2, 3)의 영상을 재생합니다. 실행 시 즉시 브라우저에서 유튜브 링크로 새 창을 열고, 대화 세션을 종료합니다.",
-          parameters: {
-            type: "object",
-            properties: {
-              index: { type: "integer", description: "재생할 영상의 인덱스 번호 (1, 2, 3 중 하나)" }
-            },
-            required: ["index"]
-          }
-        }
-      ],
-      tool_choice: "auto"
-    }
-  };
-  ws.send(JSON.stringify(sessionUpdate));
-  console.log("📤 session.update 전송 완료 (WebSocket)");
+  ws.onmessage = (e) => handleRealtimeEvent(JSON.parse(e.data));
+  ws.onerror = () => stopSession();
+  ws.onclose = () => { if (isRecording) stopSession(); };
+  isRecording = true;
+  updateUIForConnectedState();
 }
 
-// --- 마이크 캡처 → PCM16 base64 → WebSocket 전송 ---
+// --- 마이크 캡처 → PCM16 base64 → Gemini Live / WebSocket 전송 ---
 let micStream = null;
 let micProcessor = null;
 let micContext = null;
-const TARGET_SAMPLE_RATE = 24000;
+const TARGET_SAMPLE_RATE = 16000;
 
 async function startMicCapture() {
   try {
@@ -926,27 +1003,21 @@ async function startMicCapture() {
     return;
   }
 
-  // 브라우저 네이티브 sampleRate 사용 (보통 48000)
   micContext = new AudioContext();
   const nativeSR = micContext.sampleRate;
   console.log(`🎤 브라우저 네이티브 sampleRate: ${nativeSR}Hz`);
   
   const source = micContext.createMediaStreamSource(micStream);
-  
-  // ScriptProcessorNode — 2048 프레임 (약 42ms @48kHz)
   micProcessor = micContext.createScriptProcessor(2048, 1, 1);
+
   micProcessor.onaudioprocess = (e) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     
-    // 💡 웰컴 오디오가 재생 중이거나 아직 끝나지 않은 초기 온보딩 상태인 동안에는 
-    // 마이크 스트림 데이터 전송을 임시 뮤트(차단)하여 에코 피드백 루프를 방지합니다.
     if (welcomeAudio && !welcomeAudio.paused && !hasRenderedYoutubeWidget) {
       return;
     }
     
     const float32 = e.inputBuffer.getChannelData(0);
-    
-    // 다운샘플링: nativeSR → 24000
     const ratio = nativeSR / TARGET_SAMPLE_RATE;
     const downLen = Math.floor(float32.length / ratio);
     const pcm16 = new Int16Array(downLen);
@@ -956,14 +1027,23 @@ async function startMicCapture() {
       pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
     }
     const base64 = uint8ToBase64(new Uint8Array(pcm16.buffer));
+
+    // Gemini Live 전용 realtimeInput 전송 규격
     ws.send(JSON.stringify({
-      type: "input_audio_buffer.append",
-      audio: base64
+      realtimeInput: {
+        mediaChunks: [
+          {
+            mimeType: "audio/pcm",
+            data: base64
+          }
+        ]
+      }
     }));
   };
+
   source.connect(micProcessor);
   micProcessor.connect(micContext.destination);
-  console.log(`🎤 마이크 캡처 시작 (${nativeSR}Hz → ${TARGET_SAMPLE_RATE}Hz 다운샘플링 → WebSocket)`);
+  console.log(`🎤 Gemini Live 마이크 캡처 시작 (${nativeSR}Hz → ${TARGET_SAMPLE_RATE}Hz 다운샘플링 → WebSocket)`);
 }
 
 function stopMicCapture() {
@@ -988,15 +1068,13 @@ function base64ToUint8(b64) {
 
 // --- 수신 오디오 재생 ---
 let playbackCtx = null;
-let grokAnalyser = null; // 그록 목소리 비주얼라이즈용 분석기
+let grokAnalyser = null;
 let playbackQueue = [];
 let isPlaying = false;
-let activeSource = null; // 현재 재생 중인 AudioBufferSourceNode를 저장하여 끼어들기 시 즉시 중지
+let activeSource = null;
 
 function enqueueAudio(base64Audio) {
   const bytes = base64ToUint8(base64Audio);
-  
-  // 중요: 바이트 정렬 밀림 방지를 위해 복사된 ArrayBuffer 슬라이스 사용
   const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   const pcm16 = new Int16Array(arrayBuffer);
   
@@ -1006,17 +1084,16 @@ function enqueueAudio(base64Audio) {
   }
 
   if (!playbackCtx) {
-    playbackCtx = new AudioContext({ sampleRate: OUTPUT_SAMPLE_RATE });
+    playbackCtx = new AudioContext({ sampleRate: 24000 });
     grokAnalyser = playbackCtx.createAnalyser();
     grokAnalyser.fftSize = 64;
   }
 
-  // 브라우저의 오디오 서스펜드 자동 해제
   if (playbackCtx.state === "suspended") {
     playbackCtx.resume();
   }
 
-  const buffer = playbackCtx.createBuffer(1, float32.length, OUTPUT_SAMPLE_RATE);
+  const buffer = playbackCtx.createBuffer(1, float32.length, 24000);
   buffer.getChannelData(0).set(float32);
   
   playbackQueue.push(buffer);
@@ -1041,16 +1118,12 @@ function drainPlaybackQueue() {
     activeSource.connect(grokAnalyser);
   }
   
-  // 절대 예약 시간 스케줄링 핵심
   const currentTime = playbackCtx.currentTime;
   if (nextPlaybackTime <= currentTime) {
-    // 예약 시각이 이미 과거거나 초기값일 경우 즉시 재생 (미세 버퍼 20ms)
     nextPlaybackTime = currentTime + 0.02;
   }
   
   activeSource.start(nextPlaybackTime);
-  
-  // 다음 조각은 이번 조각이 끝나는 절대 시점 뒤에 꼬리를 물고 예약
   nextPlaybackTime += buffer.duration;
   
   activeSource.onended = () => {
@@ -1058,38 +1131,12 @@ function drainPlaybackQueue() {
   };
 }
 
-// 사용자가 끼어들었거나 세션이 종료되었을 때 모든 소리 강제 정지
 function interruptPlayback() {
-  console.log("🤫 [Barge-in] 오디오 정지 및 타이핑 큐 초기화");
-  
-  if (welcomeAudio) {
-    try {
-      welcomeAudio.pause();
-      welcomeAudio.currentTime = 0;
-    } catch (e) {}
-    // welcomeAudio = null; // iOS 오디오 권한 우회 화이트리스트 유지를 위해 인스턴스 보존
-  }
-
-  // 💡 서버 오디오 생성 토큰 절약: 활성화된 응답 발화가 있을 때만 서버에 취소(response.cancel) 전송
-  if (isResponseActive && ws && ws.readyState === WebSocket.OPEN) {
-    try {
-      ws.send(JSON.stringify({ type: "response.cancel" }));
-      console.log("📤 response.cancel 전송 (서버 오디오 생성 중단 완료)");
-    } catch (e) {}
-    isResponseActive = false; // 플래그 리셋
-  }
-
+  console.log("🤫 오디오 정지");
   playbackQueue = [];
-  typingQueue = []; // 타이핑 대기 큐 리셋
-  isTypingLoopRunning = false;
-  grokTextFinished = false; // 완료 플래그 리셋
-  nextPlaybackTime = 0; // 타임라인 리셋
+  nextPlaybackTime = 0;
   if (activeSource) {
-    try {
-      activeSource.stop();
-    } catch (e) {
-      // 이미 멈춘 경우 에러 무시
-    }
+    try { activeSource.stop(); } catch (e) {}
     activeSource = null;
   }
   isPlaying = false;

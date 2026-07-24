@@ -27,6 +27,7 @@ app.use(express.static(path.join(__dirname, "../public")));
 app.get("/api/diag", (req, res) => {
   const mask = (val) => val ? `${val.substring(0, 4)}*** (길이: ${val.length})` : "❌ 미설정";
   return res.json({
+    GEMINI_API_KEY: mask(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
     YOUTUBE_API_KEY: mask(process.env.YOUTUBE_API_KEY),
     XAI_API_KEY: mask(process.env.XAI_API_KEY),
     TELEGRAM_BOT_TOKEN: mask(process.env.TELEGRAM_BOT_TOKEN),
@@ -34,47 +35,51 @@ app.get("/api/diag", (req, res) => {
   });
 });
 
-// 1. xAI Grok Realtime Ephemeral Token 발급 Endpoint (가성비 Grok 단독 모드)
+// 1. Gemini Multimodal Live API 세션 토큰 / API Key 발급 Endpoint
 app.post("/api/session", async (req, res) => {
-  const apiKey = process.env.XAI_API_KEY ? process.env.XAI_API_KEY.trim() : null;
-  if (!apiKey) {
-    console.warn("⚠️ [WARN] XAI_API_KEY가 설정되지 않았습니다. 프론트엔드가 Mock 모드로 동작합니다.");
-    return res.json({ 
-      value: "mock-key-unlocked-youtube-archive-12345",
-      isMock: true
+  const geminiKey = (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "").trim();
+  
+  if (geminiKey) {
+    console.log("📡 [Session Engine] Gemini Multimodal Live API 키 발급 기동...");
+    return res.json({
+      provider: "gemini",
+      geminiApiKey: geminiKey,
+      isMock: false
     });
   }
 
-  try {
-    console.log("📡 [Session Engine] xAI Grok Voice 임시 토큰 발급 기동...");
-    const response = await fetch("https://api.x.ai/v1/realtime/client_secrets", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "grok-voice-latest",
-        expires_after: { seconds: 300 }
-      })
-    });
+  const xaiKey = process.env.XAI_API_KEY ? process.env.XAI_API_KEY.trim() : null;
+  if (xaiKey) {
+    try {
+      console.log("📡 [Session Engine] xAI Grok Voice 임시 토큰 발급 기동...");
+      const response = await fetch("https://api.x.ai/v1/realtime/client_secrets", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${xaiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "grok-voice-latest",
+          expires_after: { seconds: 300 }
+        })
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("❌ xAI Ephemeral Token 발급 에러:", errorText);
-      return res.status(500).json({ error: errorText });
+      if (response.ok) {
+        const data = await response.json();
+        return res.json({ provider: "grok", value: data.value, isMock: false });
+      }
+    } catch (err) {
+      console.error("❌ xAI 세션 생성 에러:", err);
     }
-
-    const data = await response.json();
-    if (!data.value) {
-      console.error("❌ xAI 응답 내 Ephemeral Token(value) 부재:", data);
-      return res.status(500).json({ error: data.error?.message || "xAI에서 세션 임시 키를 받아오지 못했습니다." });
-    }
-    return res.json(data);
-  } catch (err) {
-    console.error("❌ xAI 세션 생성 에러:", err);
-    return res.status(500).json({ error: err.message });
   }
+
+  console.warn("⚠️ [WARN] GEMINI_API_KEY 및 XAI_API_KEY가 미설정되었습니다. 프론트엔드가 Mock 모드로 동작합니다.");
+  return res.json({ 
+    provider: "mock",
+    value: "mock-key-unlocked-youtube-archive-12345",
+    geminiApiKey: "mock-key-unlocked-youtube-archive-12345",
+    isMock: true
+  });
 });
 
 // 2. 카카오 PlayMCP 게이트웨이 Mock & Relay API
